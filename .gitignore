@@ -1,0 +1,22 @@
+/node_modules
+/oh_modules
+/local.properties
+/.idea
+**/build
+/.hvigor
+.cxx
+/.clangd
+/.clang-format
+/.clang-tidy
+**/.test
+/.appanalyzer
+
+# 补充(SoScan HDC 项目)
+.DS_Store
+# 签名材料不入 git
+*.p12
+*.cer
+*.p7b
+*.csr
+# Claude Code 本地会话配置
+.claude/settings.local.json
