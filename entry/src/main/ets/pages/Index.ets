@@ -1,5 +1,6 @@
 import { DocumentRecord } from '../model/Document';
 import { ResultPage } from './ResultPage';
+import { ScannerPage } from './ScannerPage';
 
 /**
  * 首页 —— 文档列表 + 扫描入口。用 Navigation + NavPathStack 做导航。
@@ -14,7 +15,9 @@ struct Index {
 
   @Builder
   pageMap(name: string) {
-    if (name === 'ResultPage') {
+    if (name === 'ScannerPage') {
+      ScannerPage()
+    } else if (name === 'ResultPage') {
       ResultPage()
     }
   }
@@ -65,7 +68,7 @@ struct Index {
           .backgroundColor('#FF8C00')
           .margin({ bottom: 12 })
           .onClick(() => {
-            this.pathStack.pushPath({ name: 'ResultPage' });
+            this.pathStack.pushPath({ name: 'ScannerPage' });
           })
       }
       .width('100%')
