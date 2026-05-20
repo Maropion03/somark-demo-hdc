@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "label"
+    },
+    {
+      "name": "perm_camera_reason",
+      "value": "用于拍摄并扫描文档"
     }
   ]
 }
