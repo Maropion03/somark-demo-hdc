@@ -20,3 +20,5 @@
 *.csr
 # Claude Code 本地会话配置
 .claude/settings.local.json
+# SoMark API key(含密钥,不入 git)
+entry/src/main/ets/services/config.ets
