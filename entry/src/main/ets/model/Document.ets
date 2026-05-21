@@ -7,6 +7,7 @@ export interface DocumentRecord {
   name: string;                // 文档名(默认按时间;P1 可由 LLM 智能命名)
   createdAt: number;           // 创建时间戳(ms)
   originalImageUris: string[]; // 扫描原图在沙箱内的路径
+  status: string;              // 'parsing' 解析中 | 'done' 已完成 | 'failed' 解析失败
   parsedMarkdown: string;      // SoMark 解析得到的 Markdown(未解析为空)
   parsedJson: string;          // SoMark 解析得到的结构化 JSON 原文(未解析为空)
   summary: string;             // 一句话总结(P1;未生成为空)
@@ -26,6 +27,7 @@ export function newDocument(): DocumentRecord {
     name: name,
     createdAt: now,
     originalImageUris: [],
+    status: 'parsing',
     parsedMarkdown: '',
     parsedJson: '',
     summary: ''

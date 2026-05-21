@@ -13,12 +13,32 @@ struct Index {
   @StorageLink('documents') documents: DocumentRecord[] = [];
 
   @Builder
-  pageMap(name: string) {
+  pageMap(name: string, param: Object) {
     if (name === 'ScannerPage') {
       ScannerPage()
     } else if (name === 'ResultPage') {
-      ResultPage()
+      ResultPage({ docId: param as string })
     }
+  }
+
+  statusText(doc: DocumentRecord): string {
+    if (doc.status === 'parsing') {
+      return '解析中…';
+    }
+    if (doc.status === 'failed') {
+      return '解析失败';
+    }
+    return `已解析 · ${doc.originalImageUris.length} 页`;
+  }
+
+  statusColor(doc: DocumentRecord): string {
+    if (doc.status === 'failed') {
+      return '#FA5151';
+    }
+    if (doc.status === 'parsing') {
+      return '#FF8C00';
+    }
+    return 'rgba(255,255,255,0.5)';
   }
 
   build() {
@@ -52,9 +72,9 @@ struct Index {
                   Text(doc.name)
                     .fontSize(16)
                     .fontColor('#FFFFFF')
-                  Text(`${doc.originalImageUris.length} 页`)
+                  Text(this.statusText(doc))
                     .fontSize(12)
-                    .fontColor('rgba(255,255,255,0.5)')
+                    .fontColor(this.statusColor(doc))
                     .margin({ top: 4 })
                 }
                 .alignItems(HorizontalAlign.Start)
@@ -64,9 +84,10 @@ struct Index {
               .backgroundColor('#101112')
               .borderRadius(10)
               .onClick(() => {
-                this.pathStack.pushPath({ name: 'ResultPage' });
+                this.pathStack.pushPath({ name: 'ResultPage', param: doc.id });
               })
-            }, (doc: DocumentRecord) => doc.id)
+              // key 含 status:状态变化时 key 变,ForEach 才会重渲染该卡片
+            }, (doc: DocumentRecord) => doc.id + '_' + doc.status)
           }
           .layoutWeight(1)
           .width('100%')

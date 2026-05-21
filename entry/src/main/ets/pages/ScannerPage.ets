@@ -3,6 +3,7 @@ import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { DocumentStore } from '../services/DocumentStore';
 import { newDocument, DocumentRecord } from '../model/Document';
+import { SoMarkApi, ParseResult } from '../services/SoMarkApi';
 
 const TAG: string = 'SoScan';
 
@@ -39,7 +40,7 @@ export struct ScannerPage {
     }
   }
 
-  /** 扫描成功:把结果图复制进沙箱,存为一个新文档。 */
+  /** 扫描成功:把结果图复制进沙箱,存为新文档,并异步发起解析。 */
   saveScan(uris: string[]): void {
     try {
       const doc: DocumentRecord = newDocument();
@@ -49,10 +50,30 @@ export struct ScannerPage {
       }
       doc.originalImageUris = sandboxPaths;
       DocumentStore.addDocument(doc);
-      hilog.info(0x0000, TAG, `saved doc ${doc.id} with ${sandboxPaths.length} images`);
+      hilog.info(0x0000, TAG, `saved doc ${doc.id}, ${sandboxPaths.length} images, start parsing`);
+      this.parseDoc(doc);
     } catch (e) {
       hilog.error(0x0000, TAG, 'saveScan failed: ' + JSON.stringify(e));
     }
+  }
+
+  /** 异步把文档首图发给 SoMark API 解析,完成后更新文档状态与内容。 */
+  parseDoc(doc: DocumentRecord): void {
+    if (doc.originalImageUris.length === 0) {
+      return;
+    }
+    SoMarkApi.parse(doc.originalImageUris[0])
+      .then((result: ParseResult) => {
+        doc.parsedMarkdown = result.markdown;
+        doc.parsedJson = result.json;
+        doc.status = 'done';
+        DocumentStore.updateDocument(doc);
+      })
+      .catch((e: Error) => {
+        hilog.error(0x0000, TAG, 'parseDoc failed: ' + e.message);
+        doc.status = 'failed';
+        DocumentStore.updateDocument(doc);
+      });
   }
 
   build() {

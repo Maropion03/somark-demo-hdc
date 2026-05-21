@@ -51,6 +51,14 @@ export class DocumentStore {
     hilog.info(0x0000, TAG, `addDocument ${doc.id}, total ${list.length}`);
   }
 
+  /** 更新已存在的文档(按 id 替换):写索引 + 更新 AppStorage。 */
+  static updateDocument(doc: DocumentRecord): void {
+    const list: DocumentRecord[] = DocumentStore.list().map((d: DocumentRecord) => d.id === doc.id ? doc : d);
+    DocumentStore.writeIndex(list);
+    AppStorage.setOrCreate<DocumentRecord[]>('documents', list);
+    hilog.info(0x0000, TAG, `updateDocument ${doc.id} status=${doc.status}`);
+  }
+
   /** 把扫描结果文件复制进沙箱,返回沙箱内路径。复制失败抛错。 */
   static importImage(srcUri: string, docId: string, index: number): string {
     const dest: string = `${DocumentStore.filesDir}/${IMAGES_DIR}/${docId}_${index}.jpg`;
