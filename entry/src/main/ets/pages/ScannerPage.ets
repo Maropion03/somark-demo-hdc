@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { DocumentStore } from '../services/DocumentStore';
 import { newDocument, DocumentRecord } from '../model/Document';
 import { SoMarkApi, ParseResult } from '../services/SoMarkApi';
+import { PdfBuilder } from '../services/PdfBuilder';
 
 const TAG: string = 'SoScan';
 
@@ -57,12 +58,36 @@ export struct ScannerPage {
     }
   }
 
-  /** 异步把文档首图发给 SoMark API 解析,完成后更新文档状态与内容。 */
+  /**
+   * 异步把文档发给 SoMark API 解析,完成后更新状态与内容。
+   * 单页:沿用已验收的 JPG 直发。多页:全部图片拼成一个 PDF 整篇发(API 有跨页逻辑)。
+   */
   parseDoc(doc: DocumentRecord): void {
     if (doc.originalImageUris.length === 0) {
       return;
     }
-    SoMarkApi.parse(doc.originalImageUris[0])
+    let filePath: string = '';
+    let contentType: string = '';
+    let remoteFileName: string = '';
+    try {
+      if (doc.originalImageUris.length === 1) {
+        filePath = doc.originalImageUris[0];
+        contentType = 'image/jpeg';
+        remoteFileName = 'scan.jpg';
+      } else {
+        const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+        filePath = `${context.cacheDir}/parse_${doc.id}.pdf`;
+        PdfBuilder.build(doc.originalImageUris, filePath);
+        contentType = 'application/pdf';
+        remoteFileName = 'scan.pdf';
+      }
+    } catch (e) {
+      hilog.error(0x0000, TAG, 'parseDoc prepare failed: ' + JSON.stringify(e));
+      doc.status = 'failed';
+      DocumentStore.updateDocument(doc);
+      return;
+    }
+    SoMarkApi.parse(filePath, contentType, remoteFileName)
       .then((result: ParseResult) => {
         doc.parsedMarkdown = result.markdown;
         doc.parsedJson = result.json;

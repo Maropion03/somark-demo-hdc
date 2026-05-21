@@ -33,8 +33,8 @@ interface ParseResp {
  * POST multipart/form-data 到 /parse/sync,返回 Markdown + 结构化 JSON。
  */
 export class SoMarkApi {
-  /** 上传文件解析,返回 { markdown, json }。失败抛错。 */
-  static async parse(filePath: string): Promise<ParseResult> {
+  /** 上传文件(JPG/PDF)解析,返回 { markdown, json }。失败抛错。 */
+  static async parse(filePath: string, contentType: string, remoteFileName: string): Promise<ParseResult> {
     const req = http.createHttp();
     try {
       const res = await req.request(API_URL, {
@@ -45,8 +45,8 @@ export class SoMarkApi {
         multiFormDataList: [
           {
             name: 'file',
-            contentType: 'image/jpeg',
-            remoteFileName: 'scan.jpg',
+            contentType: contentType,
+            remoteFileName: remoteFileName,
             filePath: filePath
           },
           {
