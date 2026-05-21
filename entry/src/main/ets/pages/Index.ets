@@ -1,6 +1,7 @@
 import { DocumentRecord } from '../model/Document';
 import { ResultPage } from './ResultPage';
 import { ScannerPage } from './ScannerPage';
+import { fileUri } from '@kit.CoreFileKit';
 
 /**
  * 首页 —— 文档列表 + 扫描入口。
@@ -41,6 +42,46 @@ struct Index {
     return 'rgba(255,255,255,0.5)';
   }
 
+  /** 文档卡片:左缩略图 + 右名称/状态。 */
+  @Builder
+  docCard(doc: DocumentRecord) {
+    Row() {
+      if (doc.originalImageUris.length > 0) {
+        Image(fileUri.getUriFromPath(doc.originalImageUris[0]))
+          .width(54)
+          .height(54)
+          .borderRadius(8)
+          .objectFit(ImageFit.Cover)
+          .backgroundColor('#1C1E1F')
+      } else {
+        Column()
+          .width(54)
+          .height(54)
+          .borderRadius(8)
+          .backgroundColor('#1C1E1F')
+      }
+      Column() {
+        Text(doc.name)
+          .fontSize(16)
+          .fontColor('#FFFFFF')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.statusText(doc))
+          .fontSize(12)
+          .fontColor(this.statusColor(doc))
+          .margin({ top: 5 })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 12 })
+    }
+    .width('100%')
+    .padding(12)
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor('#101112')
+    .borderRadius(10)
+  }
+
   build() {
     Navigation(this.pathStack) {
       Column() {
@@ -68,25 +109,11 @@ struct Index {
           List({ space: 10 }) {
             ForEach(this.documents, (doc: DocumentRecord) => {
               ListItem() {
-                Column() {
-                  Text(doc.name)
-                    .fontSize(16)
-                    .fontColor('#FFFFFF')
-                  Text(this.statusText(doc))
-                    .fontSize(12)
-                    .fontColor(this.statusColor(doc))
-                    .margin({ top: 4 })
-                }
-                .alignItems(HorizontalAlign.Start)
-                .width('100%')
-                .padding(16)
+                this.docCard(doc)
               }
-              .backgroundColor('#101112')
-              .borderRadius(10)
               .onClick(() => {
                 this.pathStack.pushPath({ name: 'ResultPage', param: doc.id });
               })
-              // key 含 status:状态变化时 key 变,ForEach 才会重渲染该卡片
             }, (doc: DocumentRecord) => doc.id + '_' + doc.status)
           }
           .layoutWeight(1)
