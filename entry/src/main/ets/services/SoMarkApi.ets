@@ -53,6 +53,11 @@ export class SoMarkApi {
             name: 'api_key',
             contentType: 'text/plain',
             data: SOMARK_API_KEY
+          },
+          {
+            name: 'element_formats',
+            contentType: 'text/plain',
+            data: '{"table":"markdown"}'
           }
         ]
       });
