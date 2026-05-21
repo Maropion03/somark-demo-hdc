@@ -1,5 +1,7 @@
 # SoScan 主线闭环(阶段 0 + 阶段 1)实现计划
 
+> **✅ 状态(2026-05-21):阶段 0 + 阶段 1 全部完成并真机验收。** 主线闭环成品达成 —— 拍照/相册 → DocumentScanner 矫正 → SoMark 解析 → 原图↔结构对比 → 文档列表 → 持久化;多页文档亦通过(`PdfBuilder.ets` 把多张图合成 PDF、整篇调 API)。实现期偏差两处:① 结构渲染放弃 ArkWeb Web 组件,改为原生 ArkUI(`StructureRenderer.ets`,无 `render.html`/KaTeX);② 多页解析靠合成 PDF。下一步见末尾 05-27 Gate 与阶段 2。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 打通「拍照/相册 → 华为 DocumentScanner 矫正 → SoMark API 解析 → 原图↔结构对比展示 → 文档列表」端到端主线,产出 HDC2026 可演示的成品。
