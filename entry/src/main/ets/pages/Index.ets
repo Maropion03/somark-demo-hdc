@@ -3,15 +3,14 @@ import { ResultPage } from './ResultPage';
 import { ScannerPage } from './ScannerPage';
 
 /**
- * 首页 —— 文档列表 + 扫描入口。用 Navigation + NavPathStack 做导航。
- * Task 1:列表为空态;扫描按钮先跳结果页占位,验证路由。
- * Task 2 起扫描按钮改为启动 DocumentScanner。
+ * 首页 —— 文档列表 + 扫描入口。
+ * 文档列表从 AppStorage('documents') 响应式读取(DocumentStore 维护)。
  */
 @Entry
 @Component
 struct Index {
   @Provide('pathStack') pathStack: NavPathStack = new NavPathStack();
-  @State documents: DocumentRecord[] = [];
+  @StorageLink('documents') documents: DocumentRecord[] = [];
 
   @Builder
   pageMap(name: string) {
@@ -46,14 +45,27 @@ struct Index {
           .width('100%')
           .justifyContent(FlexAlign.Center)
         } else {
-          List({ space: 12 }) {
+          List({ space: 10 }) {
             ForEach(this.documents, (doc: DocumentRecord) => {
               ListItem() {
-                Text(doc.name)
-                  .fontSize(16)
-                  .fontColor('#FFFFFF')
-                  .padding(16)
+                Column() {
+                  Text(doc.name)
+                    .fontSize(16)
+                    .fontColor('#FFFFFF')
+                  Text(`${doc.originalImageUris.length} 页`)
+                    .fontSize(12)
+                    .fontColor('rgba(255,255,255,0.5)')
+                    .margin({ top: 4 })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .width('100%')
+                .padding(16)
               }
+              .backgroundColor('#101112')
+              .borderRadius(10)
+              .onClick(() => {
+                this.pathStack.pushPath({ name: 'ResultPage' });
+              })
             }, (doc: DocumentRecord) => doc.id)
           }
           .layoutWeight(1)
@@ -66,7 +78,7 @@ struct Index {
           .fontSize(17)
           .fontColor('#FFFFFF')
           .backgroundColor('#FF8C00')
-          .margin({ bottom: 12 })
+          .margin({ top: 12, bottom: 12 })
           .onClick(() => {
             this.pathStack.pushPath({ name: 'ScannerPage' });
           })

@@ -1,13 +1,14 @@
 import { DocumentScanner, DocType, FilterId, SaveOption, ShootingMode } from '@kit.VisionKit';
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { DocumentStore } from '../services/DocumentStore';
+import { newDocument, DocumentRecord } from '../model/Document';
 
 const TAG: string = 'SoScan';
 
 /**
  * 扫描页 —— 承载华为 Vision Kit 的 DocumentScanner 控件(拍照 + 自动矫正)。
- * Task 2:跑通扫描,onResult 拿到结果 URI 并打日志。
- * Task 5 会把结果 URI 接到 SoMark API + 持久化。
+ * 扫描成功后把结果图导入沙箱并存为一个文档。
  */
 @Component
 export struct ScannerPage {
@@ -38,6 +39,22 @@ export struct ScannerPage {
     }
   }
 
+  /** 扫描成功:把结果图复制进沙箱,存为一个新文档。 */
+  saveScan(uris: string[]): void {
+    try {
+      const doc: DocumentRecord = newDocument();
+      const sandboxPaths: string[] = [];
+      for (let i = 0; i < uris.length; i++) {
+        sandboxPaths.push(DocumentStore.importImage(uris[i], doc.id, i));
+      }
+      doc.originalImageUris = sandboxPaths;
+      DocumentStore.addDocument(doc);
+      hilog.info(0x0000, TAG, `saved doc ${doc.id} with ${sandboxPaths.length} images`);
+    } catch (e) {
+      hilog.error(0x0000, TAG, 'saveScan failed: ' + JSON.stringify(e));
+    }
+  }
+
   build() {
     NavDestination() {
       if (!this.permChecked) {
@@ -61,8 +78,12 @@ export struct ScannerPage {
             isShareable: false
           },
           onResult: (code: number, saveType: SaveOption, uris: string[]) => {
-            hilog.info(0x0000, TAG,
-              `scan result: code=${code}, saveType=${saveType}, count=${uris.length}, uris=${JSON.stringify(uris)}`);
+            hilog.info(0x0000, TAG, `scan result: code=${code}, saveType=${saveType}, count=${uris.length}, uris=${JSON.stringify(uris)}`);
+            if (code === 200 && uris.length > 0) {
+              this.saveScan(uris);
+            } else {
+              hilog.warn(0x0000, TAG, `scan NOT saved: code=${code}, uris count=${uris.length}`);
+            }
             this.pathStack.pop();
           }
         })
