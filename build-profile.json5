@@ -7,11 +7,11 @@
         "material": {
           "certpath": "/Users/jerryning/.ohos/config/default_SoScan_3lpkFero0VjTPt3_edcYiuDAkWhzHsgB0d1SFOKuZKA=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BFBAA54F2998B437D601DDA5770EB921EEB00CF78B7E9A5DDA80A974569BDF09E4894D5EE21F933",
+          "keyPassword": "0000001BD9A5AA73FD795C31984C8C82A8B574127477E6D6BD4ABF997E5999F26904D5342C50F902244B35",
           "profile": "/Users/jerryning/.ohos/config/default_SoScan_3lpkFero0VjTPt3_edcYiuDAkWhzHsgB0d1SFOKuZKA=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "/Users/jerryning/.ohos/config/default_SoScan_3lpkFero0VjTPt3_edcYiuDAkWhzHsgB0d1SFOKuZKA=.p12",
-          "storePassword": "0000001BE0622523511B55973B52CD704C449F08CE5034642E3FE75108F0B5DDBA5CF5DC7B25832B58D148"
+          "storePassword": "0000001B950EFEDFEE9DDCEA3C271CF11755DE4AF3AAA4447EA90BB04B1B48CACF75CE0F0BF699B1F4D854"
         }
       }
     ],

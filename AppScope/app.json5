@@ -1,6 +1,6 @@
 {
   "app": {
-    "bundleName": "tech.somark.soscan",
+    "bundleName": "demo.somark.ai",
     "vendor": "example",
     "versionCode": 1000000,
     "versionName": "1.0.0",
