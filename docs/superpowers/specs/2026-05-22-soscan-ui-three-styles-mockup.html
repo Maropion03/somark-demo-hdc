@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoScan 首页 · 三套风格 v9</title>
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  :root{ --orange:#FF8C00; }
+  html,body{ background:#000; }
+  body{
+    font-family:'PingFang SC','Source Han Sans CN','Noto Sans SC',-apple-system,system-ui,sans-serif;
+    color:#fff; min-height:100vh; padding:54px 28px 64px;
+    display:flex; flex-direction:column; align-items:center;
+    -webkit-font-smoothing:antialiased;
+    background:radial-gradient(ellipse 620px 320px at 50% -30px, rgba(255,140,0,.08), transparent 70%), #000;
+  }
+  .page{ width:100%; max-width:1140px; }
+  .eyebrow{
+    font-size:12px; letter-spacing:.24em; color:var(--orange); font-weight:600;
+    margin-bottom:16px; display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::before{ content:''; width:22px; height:2px; background:var(--orange); }
+  h2{ font-size:33px; font-weight:600; letter-spacing:-.01em; margin-bottom:11px; }
+  .subtitle{ font-size:14.5px; color:rgba(255,255,255,.52); line-height:1.7; margin-bottom:40px; max-width:720px; }
+  .subtitle b{ color:rgba(255,255,255,.82); font-weight:600; }
+
+  .cards{ display:flex; flex-wrap:wrap; gap:26px; justify-content:center; }
+  .card{
+    cursor:pointer; border-radius:24px; padding:16px 16px 8px;
+    border:1px solid rgba(255,255,255,.07); background:rgba(255,255,255,.015);
+    transition:transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s, border-color .25s;
+    opacity:0; transform:translateY(20px); animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards;
+  }
+  .card:nth-child(1){ animation-delay:.05s; }
+  .card:nth-child(2){ animation-delay:.15s; }
+  .card:nth-child(3){ animation-delay:.25s; }
+  @keyframes rise{ to{ opacity:1; transform:translateY(0); } }
+  .card:hover{ transform:translateY(-6px); border-color:rgba(255,255,255,.14); }
+  .card.selected{ border-color:var(--orange); box-shadow:0 0 0 1px var(--orange), 0 18px 40px -16px rgba(255,140,0,.5); }
+  .cap{ padding:14px 6px 8px; }
+  .cap-row{ display:flex; align-items:center; gap:9px; }
+  .cap-letter{
+    width:24px; height:24px; border-radius:6px; background:rgba(255,140,0,.13);
+    color:var(--orange); font-size:13px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .cap-name{ font-size:17px; font-weight:600; }
+  .cap-en{ font-size:11px; color:rgba(255,255,255,.32); letter-spacing:.06em; }
+  .cap-line{ font-size:12px; color:rgba(255,255,255,.5); margin-top:6px; padding-left:33px; }
+  .card.selected .cap-letter{ background:var(--orange); color:#000; }
+
+  /* ---------- shared phone ---------- */
+  .phone{
+    width:298px; border-radius:44px; padding:10px;
+    background:linear-gradient(160deg,#2a2c30,#0d0e0f);
+    box-shadow:0 26px 50px -22px rgba(0,0,0,.85);
+  }
+  .screen{ border-radius:35px; overflow:hidden; height:568px; display:flex; flex-direction:column; position:relative; }
+  .statusbar{
+    height:34px; flex:none; display:flex; align-items:center; justify-content:space-between;
+    padding:0 24px 0 26px; font-size:12px; font-weight:600;
+  }
+  .dots{ display:flex; gap:3px; }
+  .dots b{ width:5px; height:5px; border-radius:50%; display:block; }
+  .doclist{ flex:1; padding:4px 18px; display:flex; flex-direction:column; gap:10px; overflow:hidden; }
+  .doc{ display:flex; align-items:center; gap:12px; padding:12px; }
+  .thumb{ width:50px; height:50px; flex:none; position:relative; overflow:hidden; }
+  .thumb i{ position:absolute; left:9px; height:4px; border-radius:2px; display:block; }
+  .thumb i:nth-child(1){ top:12px; width:25px; }
+  .thumb i:nth-child(2){ top:22px; width:31px; }
+  .thumb i:nth-child(3){ top:32px; width:19px; }
+  .meta{ flex:1; min-width:0; }
+  .dname{ font-size:14.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dstatus{ font-size:11.5px; margin-top:4px; }
+  .scanwrap{ flex:none; padding:14px 20px 22px; }
+  .scanbtn{ height:52px; display:flex; align-items:center; justify-content:center; gap:9px; font-size:16px; font-weight:600; }
+  .cam{ width:17px; height:14px; border-radius:3px; position:relative; flex:none; }
+  .cam::before{ content:''; position:absolute; width:7px; height:7px; border-radius:50%;
+    border:2px solid currentColor; left:50%; top:50%; transform:translate(-50%,-50%); }
+  .cam::after{ content:''; position:absolute; width:6px; height:2.5px; border-radius:2px 2px 0 0;
+    background:currentColor; left:50%; top:-2.5px; transform:translateX(-50%); }
+
+  /* ================= A · 流光 Aurora ================= */
+  .s-a{ background:#000; }
+  .s-a .statusbar{ color:rgba(255,255,255,.7); }
+  .s-a .dots b{ background:rgba(255,255,255,.55); }
+  .a-top{ flex:none; padding:28px 0 22px; display:flex; flex-direction:column;
+    align-items:center; gap:13px; position:relative; z-index:0; }
+  .a-mark{ display:flex; flex-direction:column; gap:4px; }
+  .a-mark i{
+    height:5px; border-radius:2px; display:block;
+    background:linear-gradient(180deg,#e9ecf1,#aeb4bf 40%,#5b616c 70%,#34383f);
+  }
+  .a-mark i:nth-child(1){ width:34px; }
+  .a-mark i:nth-child(2){ width:22px; }
+  .a-mark i:nth-child(3){ width:27px; }
+  .a-word{
+    position:relative; display:inline-block;
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    font-size:41px; font-weight:600; letter-spacing:.5px;
+    background:linear-gradient(180deg,#8b92a1 0%,#cdd3dc 25%,#787e8b 49%,#474c57 62%,#9298a4 82%,#5f6573 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  /* glow — a blurred copy of the illuminated letters → the halo takes each letter's shape */
+  .a-word::before{
+    content:'SoScan'; position:absolute; left:0; top:0; z-index:-1;
+    background:radial-gradient(ellipse 60% 170% at 50% 50%, #ffffff 0%, #ffffff 20%,
+       rgba(255,255,255,.78) 42%, rgba(255,255,255,0) 72%);
+    background-repeat:no-repeat; background-size:58% 100%; background-position:-160% 50%;
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:blur(17px);
+    animation:aLight 13s linear infinite;
+  }
+  /* the illumination — sweeps over the letter faces, blowing them extremely bright */
+  .a-word::after{
+    content:'SoScan'; position:absolute; left:0; top:0;
+    background:radial-gradient(ellipse 60% 170% at 50% 50%, #ffffff 0%, #ffffff 18%,
+       rgba(255,255,255,.72) 40%, rgba(255,255,255,0) 72%);
+    background-repeat:no-repeat; background-size:58% 100%; background-position:-160% 50%;
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 0 7px rgba(255,255,255,.55));
+    animation:aLight 13s linear infinite;
+  }
+  @keyframes aLight{ to{ background-position:258% 50%; } }
+  .a-tag{ font-size:10px; letter-spacing:.34em; color:rgba(255,255,255,.4); }
+  .s-a .doc{
+    background:linear-gradient(160deg, rgba(255,255,255,.05), rgba(255,255,255,.014));
+    border:1px solid rgba(255,255,255,.07); border-radius:14px;
+  }
+  .s-a .thumb{ border-radius:10px; background:linear-gradient(155deg,#1a1d22,#0c0d0f); }
+  .s-a .thumb i{ background:rgba(255,255,255,.24); }
+  .s-a .dname{ color:#fff; font-weight:400; }
+  .s-a .dstatus{ color:rgba(255,255,255,.42); }
+  .s-a .doc.parsing .dstatus{ color:var(--orange); }
+  .s-a .scanbtn{
+    border-radius:26px; color:#fff;
+    background:linear-gradient(180deg,#ffbe5c,#ff9a1f 44%,#ff8c00 62%,#e67e00);
+    box-shadow:0 0 26px rgba(255,140,0,.46), inset 0 2px 1px rgba(255,255,255,.6),
+      inset 0 -3px 7px rgba(170,75,0,.55);
+  }
+
+  /* ================= B · 漾 Fluid ================= */
+  .s-b{ background:#0a0a0c; }
+  .s-b .statusbar{ color:rgba(255,255,255,.62); }
+  .s-b .dots b{ background:rgba(255,255,255,.5); }
+  .b-head{ flex:none; padding:15px 24px 8px; display:flex; align-items:center; gap:12px; }
+  .b-mark{ display:flex; flex-direction:column; gap:4px; }
+  .b-mark i{ height:5px; border-radius:3px; display:block; background:var(--orange); }
+  .b-mark i:nth-child(1){ width:23px; }
+  .b-mark i:nth-child(2){ width:15px; }
+  .b-mark i:nth-child(3){ width:19px; }
+  .b-word{ font-size:24px; font-weight:600; color:#fff; letter-spacing:.01em; }
+  .b-count{ margin-left:auto; font-size:12px; color:rgba(255,255,255,.4); }
+  .b-list{ flex:1; padding:12px 22px 0; display:flex; flex-direction:column; gap:6px; }
+  .b-doc{ display:flex; align-items:center; gap:14px; padding:9px 8px; }
+  .b-thumb{
+    width:52px; height:52px; flex:none;
+    border-radius:47% 53% 52% 48% / 51% 47% 53% 49%;
+    background:linear-gradient(150deg,#23242a,#15161a);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .b-thumb svg{ width:26px; height:26px; }
+  .b-drop{ animation:bpulse 2.6s ease-in-out infinite; transform-origin:center; }
+  @keyframes bpulse{ 50%{ transform:scale(1.13); opacity:.55; } }
+  .b-meta{ flex:1; min-width:0; }
+  .b-dname{ font-size:15px; font-weight:500; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .b-status{ font-size:12px; margin-top:4px; color:rgba(255,255,255,.45); }
+  .b-status.done{ color:#e2933e; }
+  .b-pool{ position:absolute; left:0; right:0; bottom:0; height:176px; pointer-events:none; }
+  .b-liquid{ position:absolute; inset:0; width:100%; height:100%; }
+  .wv{ animation:bdrift 17s linear infinite; }
+  .wv-2{ animation-duration:27s; }
+  @keyframes bdrift{ to{ transform:translateX(-298px); } }
+  .b-cta{
+    position:absolute; left:0; right:0; bottom:32px;
+    display:flex; align-items:center; justify-content:center; gap:9px;
+    font-size:16.5px; font-weight:600; color:#fff;
+  }
+  .b-cta .cam{ color:#fff; }
+
+  /* ================= C · 触感 Tactile ================= */
+  .s-c{ background:#0c0c0d; }
+  .s-c .statusbar{ color:rgba(255,255,255,.6); }
+  .s-c .dots b{ background:rgba(255,255,255,.48); }
+  .c-head{ flex:none; padding:9px 22px 14px; display:flex; align-items:flex-end; justify-content:space-between; }
+  .c-brand{ display:flex; align-items:center; gap:10px; }
+  .c-mark{ display:flex; flex-direction:column; gap:3px; }
+  .c-mark i{
+    height:5px; border-radius:2px; display:block;
+    background:linear-gradient(180deg,#ffae42,#df7a00);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 1px 1px rgba(0,0,0,.55);
+  }
+  .c-mark i:nth-child(1){ width:21px; }
+  .c-mark i:nth-child(2){ width:14px; }
+  .c-mark i:nth-child(3){ width:17px; }
+  .c-word{ font-size:23px; font-weight:600; color:#e9eaec; text-shadow:0 1.5px 2px rgba(0,0,0,.7); }
+  .c-count{ font-size:12px; color:rgba(255,255,255,.34); }
+  .s-c .doclist{ padding:6px 17px; gap:11px; }
+  .s-c .doc{
+    border-radius:14px; padding:12px;
+    background:linear-gradient(180deg,#27282b 0%,#1d1e21 56%,#191a1c 100%);
+    box-shadow:
+      inset 0 1.2px 0 rgba(255,255,255,.11),
+      inset 0 -8px 12px -9px rgba(0,0,0,.75),
+      0 2px 0 #050506,
+      0 7px 13px rgba(0,0,0,.62);
+  }
+  .s-c .thumb{
+    border-radius:9px; background:#0a0a0b;
+    box-shadow:inset 0 2px 6px rgba(0,0,0,.92), inset 0 -1px 0 rgba(255,255,255,.05);
+  }
+  .s-c .thumb i{ background:rgba(255,255,255,.2); }
+  .s-c .dname{ color:#eceef0; font-weight:500; }
+  .s-c .dstatus{ color:rgba(255,255,255,.4); padding-left:14px; position:relative; }
+  .s-c .dstatus::before{
+    content:''; position:absolute; left:0; top:50%; transform:translateY(-50%);
+    width:7px; height:7px; border-radius:50%;
+    background:#2f6f33; box-shadow:0 0 7px #54c059, inset 0 1px 1px rgba(255,255,255,.4);
+  }
+  .s-c .doc.parsing .dstatus{ color:var(--orange); }
+  .s-c .doc.parsing .dstatus::before{ background:#7a4400; box-shadow:0 0 9px var(--orange), inset 0 1px 1px rgba(255,220,160,.6); }
+  .c-kb{
+    flex:none; padding:0 0 16px; display:flex; flex-direction:column; gap:6px;
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0%, #000 30%);
+    mask-image:linear-gradient(to bottom, transparent 0%, #000 30%);
+  }
+  .c-kb-row{ display:flex; gap:6px; justify-content:center; }
+  /* staggered rows — like a real keyboard, top rows offset from the bottom */
+  .c-kb-row.r1{ transform:translateX(-17px); }
+  .c-kb-row.r2{ transform:translateX(15px); }
+  .c-key{
+    width:46px; height:38px; flex:none; border-radius:8px; padding:3px 3px 6px;
+    background:linear-gradient(180deg,#303135,#191a1d);
+    box-shadow:0 2px 3px rgba(0,0,0,.5), 0 5px 9px rgba(0,0,0,.5);
+  }
+  .c-key .kf{
+    width:100%; height:100%; border-radius:5px;
+    background:linear-gradient(180deg,#3e4045,#2a2b2f 74%,#242528);
+    box-shadow:inset 0 1.5px 0 rgba(255,255,255,.13), inset 0 -3px 5px rgba(0,0,0,.45);
+  }
+  .c-key.ckorange{
+    width:150px;
+    background:linear-gradient(180deg,#c47600,#7a4900);
+  }
+  .c-key.ckorange .kf{
+    background:linear-gradient(180deg,#ffb24a,#f0890a 72%,#e07e00);
+    box-shadow:inset 0 1.6px 0 rgba(255,255,255,.5), inset 0 -3px 5px rgba(165,78,0,.4);
+    display:flex; align-items:center; justify-content:center; gap:7px;
+    color:#fff; font-size:14.5px; font-weight:600;
+  }
+  .c-key.ckorange .cam{ color:#fff; }
+
+  .foot{
+    margin-top:34px; padding-top:20px; border-top:1px solid rgba(255,255,255,.08);
+    font-size:13px; color:rgba(255,255,255,.5); line-height:1.75;
+  }
+  .foot b{ color:#fff; font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow">SOSCAN · 首页 v9</div>
+    <h2>最后两处微调</h2>
+    <p class="subtitle"><b>A</b> 光晕改成<b>用字母的形状</b>来做(模糊的字)—— 所以它天然跟着每个字母变化、跟着光走 · <b>B</b> 已定 · <b>C</b> 上两行键<b>左右错开</b>(不跟底排对齐),像真键盘的错行;样式你说 OK,没动。</p>
+
+    <div class="cards">
+
+      <!-- ===== A ===== -->
+      <div class="card" data-choice="a" onclick="toggleSelect(this)">
+        <div class="phone"><div class="screen s-a">
+          <div class="statusbar"><span>9:41</span><span class="dots"><b></b><b></b><b></b></span></div>
+          <div class="a-top">
+            <div class="a-mark"><i></i><i></i><i></i></div>
+            <div class="a-word">SoScan</div>
+            <div class="a-tag">文档解析 · 结构还原</div>
+          </div>
+          <div class="doclist">
+            <div class="doc"><div class="thumb"><i></i><i></i><i></i></div>
+              <div class="meta"><div class="dname">财务报表 · 2024Q2</div><div class="dstatus">已解析 · 12 页</div></div></div>
+            <div class="doc"><div class="thumb"><i></i><i></i><i></i></div>
+              <div class="meta"><div class="dname">设备采购合同</div><div class="dstatus">已解析 · 5 页</div></div></div>
+            <div class="doc parsing"><div class="thumb"><i></i><i></i><i></i></div>
+              <div class="meta"><div class="dname">实验数据记录</div><div class="dstatus">解析中…</div></div></div>
+          </div>
+          <div class="scanwrap"><div class="scanbtn"><span class="cam"></span>扫描文档</div></div>
+        </div></div>
+        <div class="cap">
+          <div class="cap-row"><div class="cap-letter">A</div><div class="cap-name">流光</div><div class="cap-en">Aurora</div></div>
+          <div class="cap-line">柔光扫过 · 字母极亮 · 光晕随字母形状变化</div>
+        </div>
+      </div>
+
+      <!-- ===== B ===== -->
+      <div class="card" data-choice="b" onclick="toggleSelect(this)">
+        <div class="phone"><div class="screen s-b">
+          <div class="statusbar"><span>9:41</span><span class="dots"><b></b><b></b><b></b></span></div>
+          <div class="b-head">
+            <div class="b-mark"><i></i><i></i><i></i></div>
+            <div class="b-word">SoScan</div>
+            <div class="b-count">3 份文档</div>
+          </div>
+          <div class="b-list">
+            <div class="b-doc">
+              <div class="b-thumb">
+                <svg viewBox="0 0 26 26">
+                  <rect x="6" y="3.5" width="14" height="19" rx="4" fill="none" stroke="#fff" stroke-width="2" opacity=".85"/>
+                  <path d="M9.5 10 Q13 9.2 16.5 10" stroke="#ff8c00" stroke-width="2" fill="none" stroke-linecap="round"/>
+                  <path d="M9.5 14 Q13 13.3 16.5 14" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" opacity=".5"/>
+                  <path d="M9.5 18 Q11.5 17.6 13.5 18" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" opacity=".5"/>
+                </svg>
+              </div>
+              <div class="b-meta"><div class="b-dname">财务报表 · 2024Q2</div><div class="b-status done">已解析 · 12 页</div></div>
+            </div>
+            <div class="b-doc">
+              <div class="b-thumb">
+                <svg viewBox="0 0 26 26">
+                  <rect x="6" y="3.5" width="14" height="19" rx="4" fill="none" stroke="#fff" stroke-width="2" opacity=".85"/>
+                  <path d="M9.5 10 Q13 9.2 16.5 10" stroke="#ff8c00" stroke-width="2" fill="none" stroke-linecap="round"/>
+                  <path d="M9.5 14 Q13 13.3 16.5 14" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" opacity=".5"/>
+                  <path d="M9.5 18 Q11.5 17.6 13.5 18" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" opacity=".5"/>
+                </svg>
+              </div>
+              <div class="b-meta"><div class="b-dname">设备采购合同</div><div class="b-status done">已解析 · 5 页</div></div>
+            </div>
+            <div class="b-doc">
+              <div class="b-thumb">
+                <svg viewBox="0 0 26 26">
+                  <path class="b-drop" d="M13 4 C 18 11.5 20 14.5 20 17.5 A 7 7 0 1 1 6 17.5 C 6 14.5 8 11.5 13 4 Z" fill="#ff8c00"/>
+                </svg>
+              </div>
+              <div class="b-meta"><div class="b-dname">实验数据记录</div><div class="b-status">解析中…</div></div>
+            </div>
+          </div>
+          <div class="b-pool">
+            <svg class="b-liquid" viewBox="0 0 298 176" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="bfront" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0" stop-color="#ffb04a"/><stop offset="1" stop-color="#e26d00"/>
+                </linearGradient>
+              </defs>
+              <path class="wv wv-2" fill="#ffc880" d="M0 60 C 50 76 99 76 149 60 C 199 44 248 44 298 60 C 348 76 397 76 447 60 C 497 44 546 44 596 60 L596 176 L0 176 Z"/>
+              <path class="wv wv-1" fill="url(#bfront)" d="M0 52 C 50 32 99 32 149 52 C 199 72 248 72 298 52 C 348 32 397 32 447 52 C 497 72 546 72 596 52 L596 176 L0 176 Z"/>
+            </svg>
+            <div class="b-cta"><span class="cam"></span>扫描文档</div>
+          </div>
+        </div></div>
+        <div class="cap">
+          <div class="cap-row"><div class="cap-letter">B</div><div class="cap-name">漾</div><div class="cap-en">Fluid</div></div>
+          <div class="cap-line">整片流动液面 · 干净无光晕 · 已定</div>
+        </div>
+      </div>
+
+      <!-- ===== C ===== -->
+      <div class="card" data-choice="c" onclick="toggleSelect(this)">
+        <div class="phone"><div class="screen s-c">
+          <div class="statusbar"><span>9:41</span><span class="dots"><b></b><b></b><b></b></span></div>
+          <div class="c-head">
+            <div class="c-brand"><div class="c-mark"><i></i><i></i><i></i></div><div class="c-word">SoScan</div></div>
+            <div class="c-count">3 份文档</div>
+          </div>
+          <div class="doclist">
+            <div class="doc"><div class="thumb"><i></i><i></i><i></i></div>
+              <div class="meta"><div class="dname">财务报表 · 2024Q2</div><div class="dstatus">已解析 · 12 页</div></div></div>
+            <div class="doc"><div class="thumb"><i></i><i></i><i></i></div>
+              <div class="meta"><div class="dname">设备采购合同</div><div class="dstatus">已解析 · 5 页</div></div></div>
+            <div class="doc parsing"><div class="thumb"><i></i><i></i><i></i></div>
+              <div class="meta"><div class="dname">实验数据记录</div><div class="dstatus">解析中…</div></div></div>
+          </div>
+          <div class="c-kb">
+            <div class="c-kb-row r1">
+              <div class="c-key"><div class="kf"></div></div><div class="c-key"><div class="kf"></div></div>
+              <div class="c-key"><div class="kf"></div></div><div class="c-key"><div class="kf"></div></div>
+              <div class="c-key"><div class="kf"></div></div><div class="c-key"><div class="kf"></div></div>
+              <div class="c-key"><div class="kf"></div></div>
+            </div>
+            <div class="c-kb-row r2">
+              <div class="c-key"><div class="kf"></div></div><div class="c-key"><div class="kf"></div></div>
+              <div class="c-key"><div class="kf"></div></div><div class="c-key"><div class="kf"></div></div>
+              <div class="c-key"><div class="kf"></div></div><div class="c-key"><div class="kf"></div></div>
+              <div class="c-key"><div class="kf"></div></div>
+            </div>
+            <div class="c-kb-row r3">
+              <div class="c-key"><div class="kf"></div></div><div class="c-key"><div class="kf"></div></div>
+              <div class="c-key ckorange"><div class="kf"><span class="cam"></span>扫描文档</div></div>
+              <div class="c-key"><div class="kf"></div></div><div class="c-key"><div class="kf"></div></div>
+            </div>
+          </div>
+        </div></div>
+        <div class="cap">
+          <div class="cap-row"><div class="cap-letter">C</div><div class="cap-name">触感</div><div class="cap-en">Tactile</div></div>
+          <div class="cap-line">真实键盘 · 错行排布 · 橙键融入键阵</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="foot">
+      静态视觉稿(浏览器近似,真机 ArkUI 会更细腻)。<b>A</b> 光晕不再是一团圆形,而是把"被照亮的字"模糊一份铺在背后 —— 光扫到 S 时光晕是 S 的形,到 o 时是 o 的形,自然跟着字母走;<b>C</b> 上两行键左右错开、和底排不再对齐。<br>
+      到位的话就<b>定稿</b> —— 我写设计文档、搭三个 worktree、开工(每个 build 通过 ping 你签名)。
+    </div>
+  </div>
+</body>
+</html>
