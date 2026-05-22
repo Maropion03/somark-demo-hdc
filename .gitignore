@@ -22,3 +22,5 @@
 .claude/settings.local.json
 # SoMark API key(含密钥,不入 git)
 entry/src/main/ets/services/config.ets
+# superpowers 工作目录(brainstorm 草稿)—— 设计文档另存 docs/superpowers/
+.superpowers/
