@@ -85,7 +85,7 @@ struct Index {
   build() {
     Navigation(this.pathStack) {
       Column() {
-        Text('SoScan')
+        Text($r('app.string.app_name'))
           .fontSize(26)
           .fontWeight(FontWeight.Bold)
           .fontColor('#FFFFFF')

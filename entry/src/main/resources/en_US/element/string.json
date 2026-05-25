@@ -2,23 +2,23 @@
   "string": [
     {
       "name": "app_name",
-      "value": "扫描王中王"
+      "value": "ScanKing"
     },
     {
       "name": "module_desc",
-      "value": "拍照即得结构化解析的文档扫描工具"
+      "value": "Snap a photo, get a structured document parse"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "扫描王中王主界面"
+      "value": "ScanKing main entry"
     },
     {
       "name": "EntryAbility_label",
-      "value": "扫描王中王"
+      "value": "ScanKing"
     },
     {
       "name": "perm_camera_reason",
-      "value": "用于拍摄并扫描文档"
+      "value": "Used to capture and scan documents"
     }
   ]
 }
