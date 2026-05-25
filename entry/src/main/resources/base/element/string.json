@@ -1,10 +1,6 @@
 {
   "string": [
     {
-      "name": "app_name",
-      "value": "扫描王中王"
-    },
-    {
       "name": "module_desc",
       "value": "拍照即得结构化解析的文档扫描工具"
     },

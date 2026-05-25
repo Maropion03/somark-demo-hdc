@@ -1,10 +1,6 @@
 {
   "string": [
     {
-      "name": "app_name",
-      "value": "ScanKing"
-    },
-    {
       "name": "module_desc",
       "value": "Snap a photo, get a structured document parse"
     },
