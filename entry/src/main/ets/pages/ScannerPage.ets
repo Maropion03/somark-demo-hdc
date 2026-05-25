@@ -140,7 +140,7 @@ export struct ScannerPage {
           Text('需要相机权限才能扫描文档')
             .fontSize(16)
             .fontColor('#FFFFFF')
-          Text('请在系统设置中允许扫描王中王使用相机')
+          Text('请在系统设置中允许 SoScan 使用相机')
             .fontSize(13)
             .fontColor('rgba(255,255,255,0.5)')
             .margin({ top: 8 })

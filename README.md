@@ -1,6 +1,6 @@
-# 扫描王中王 · 智能文档扫描
+# SoScan · 智能文档扫描
 
-> 应用市场名「扫描王中王」(ScanKing);仓库 / 工程名沿用 SoScan,bundle `ai.somark.demo`。
+> 应用名「SoScan」;仓库 / 工程名一致,bundle `ai.somark.demo`。
 
 SoMark HDC2026 演示用 HarmonyOS NEXT 文档扫描 app。手机对准文档,瞬间得到精准还原的结构化解析结果 —— 华为 DocumentScanner 负责扫描矫正,SoMark 解析 API 负责结构化解析。
 

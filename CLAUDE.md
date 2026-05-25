@@ -1,7 +1,7 @@
-# 扫描王中王(工程名 SoScan)· 项目说明(Claude Code)
+# SoScan · 项目说明(Claude Code)
 
 > HarmonyOS NEXT 文档扫描 app,SoMark HDC2026 演示项目。
-> 应用市场名「扫描王中王」(ScanKing);工程 / 仓库 / bundle / 日志 TAG 沿用 SoScan。
+> 应用名「SoScan」;工程 / 仓库 / bundle / 日志 TAG 全部一致。
 > 设计与计划见 `docs/superpowers/specs/` 与 `docs/superpowers/plans/`。
 
 ## 协作模式
