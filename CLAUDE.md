@@ -1,6 +1,7 @@
-# SoScan · 项目说明(Claude Code)
+# 扫描王中王(工程名 SoScan)· 项目说明(Claude Code)
 
 > HarmonyOS NEXT 文档扫描 app,SoMark HDC2026 演示项目。
+> 应用市场名「扫描王中王」(ScanKing);工程 / 仓库 / bundle / 日志 TAG 沿用 SoScan。
 > 设计与计划见 `docs/superpowers/specs/` 与 `docs/superpowers/plans/`。
 
 ## 协作模式
@@ -29,4 +30,4 @@
 
 - 测试机:HUAWEI Mate 80 Pro,HarmonyOS 6.0.0 / API 22,设备号 `5JV0225A17000048`。
 - 工程:`SoScan/`,`compatibleSdkVersion` 6.0.0(22),bundle `ai.somark.demo`,入口 `EntryAbility`。
-- 工作分支:`main`(单人 demo 仓库,直接在 main 提交);远端 `gitlab.soulcode.cn/somark/edge_infer/somark-demo-hdc`。
+- 工作分支:`nwk/<type>/<kebab-topic>` (type ∈ feat/fix/chore/docs/refactor/test),通过 MR 合入 `main`;远端 `gitlab.soulcode.cn/somark/edge_infer/somark-demo-hdc`(glab CLI)。
