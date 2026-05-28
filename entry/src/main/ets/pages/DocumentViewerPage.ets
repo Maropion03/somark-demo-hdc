@@ -30,6 +30,7 @@ export struct DocumentViewerPage {
   @State mdVisible: boolean = false;
   @State mdFullDoc: boolean = false;
   @State selecting: boolean = false;
+  @State cardCloseToken: number = 0;
   @State pages: SmPageInfo[] = [];
   @State screenW: number = 360;
   scroller: Scroller = new Scroller();
@@ -89,6 +90,7 @@ export struct DocumentViewerPage {
   // fullDoc=true:解析按钮,看整篇;false:左滑,看当前页
   openSheet(fullDoc: boolean): void {
     if (this.currentDoc() === undefined) return;
+    this.cardCloseToken++;   // 互斥:打开 markdown 抽屉时收起菜单卡
     this.mdFullDoc = fullDoc;
     this.mdVisible = true;
   }
@@ -169,8 +171,9 @@ export struct DocumentViewerPage {
                     docId: this.docId,
                     docName: this.currentDoc()!.name,
                     pageIndex: idx,
-                    onSelStart: () => { this.selecting = true; },
-                    onSelEnd: () => { this.selecting = false; },
+                    closeToken: this.cardCloseToken,
+                    onDragActive: (a: boolean) => { this.selecting = a; },
+                    onCardOpen: () => { this.mdVisible = false; },
                     onAddCitation: (ref: BlockRef) => this.onAddCitation(ref)
                   })
                     .height(this.pageHeight(idx))

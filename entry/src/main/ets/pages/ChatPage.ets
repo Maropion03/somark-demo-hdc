@@ -324,7 +324,7 @@ export struct ChatPage {
               Column()
                 .width('100%')
                 .height('100%')
-                .backgroundColor(Theme.BG_MASK)
+                .backgroundColor(Color.Transparent)
                 .onClick(() => { this.drawerExpanded = false; })
             }
           }

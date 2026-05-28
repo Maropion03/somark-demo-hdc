@@ -18,9 +18,14 @@ export struct BboxImagePage {
   docId: string = '';
   docName: string = '';
   pageIndex: number = 0;
-  onSelStart: () => void = () => {};
-  onSelEnd: () => void = () => {};
+  onDragActive: (active: boolean) => void = () => {};  // 长按框选中(禁列表滚动/挡左滑)
+  onCardOpen: () => void = () => {};                   // 卡片打开(父级据此收起 markdown 抽屉)
   onAddCitation: (ref: BlockRef) => void = () => {};
+  @Prop @Watch('onCloseToken') closeToken: number = 0; // 父级 ++ 时强制收卡
+
+  onCloseToken(): void {
+    if (this.carding || this.pressing) this.closeSelection();
+  }
 
   @State boxW: number = 0;
   @State boxH: number = 0;
@@ -79,8 +84,13 @@ export struct BboxImagePage {
   selectedMarkdown(): string {
     const parts: string[] = [];
     for (const b of this.selectedBlocks()) {
-      if (b.type === 'figure' && b.imgUrl.length > 0) parts.push(`![](${b.imgUrl})`);
-      else if (b.content.length > 0) parts.push(b.content);
+      // figure:图片 + 图片理解(content),与 Markdown 抽屉保持一致
+      if (b.type === 'figure' && b.imgUrl.length > 0) {
+        parts.push(`![](${b.imgUrl})`);
+        if (b.content.length > 0) parts.push(b.content);
+      } else if (b.content.length > 0) {
+        parts.push(b.content);
+      }
     }
     return parts.join('\n\n');
   }
@@ -92,7 +102,7 @@ export struct BboxImagePage {
     this.anchorIdx = idx;
     this.curIdx = idx;
     this.carding = true;
-    this.onSelStart();
+    this.onCardOpen();
   }
 
   // 长按按住:进入框选,记录锚点(不弹卡)
@@ -103,7 +113,7 @@ export struct BboxImagePage {
     this.curIdx = idx;
     this.pressing = true;
     this.carding = false;
-    this.onSelStart();
+    this.onDragActive(true);
   }
 
   // 长按移动:扩展到当前 block
@@ -117,7 +127,8 @@ export struct BboxImagePage {
   onLongEnd(): void {
     if (!this.pressing) return;
     this.pressing = false;
-    if (this.anchorIdx >= 0) this.carding = true;
+    this.onDragActive(false);
+    if (this.anchorIdx >= 0) { this.carding = true; this.onCardOpen(); }
   }
 
   closeSelection(): void {
@@ -125,7 +136,7 @@ export struct BboxImagePage {
     this.carding = false;
     this.anchorIdx = -1;
     this.curIdx = -1;
-    this.onSelEnd();
+    this.onDragActive(false);
   }
 
   doAdd(): void {
