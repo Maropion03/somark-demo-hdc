@@ -59,6 +59,24 @@ export class DocumentStore {
     hilog.info(0x0000, TAG, `updateDocument ${doc.id} status=${doc.status}`);
   }
 
+  /** 删除文档:移除索引记录 + 删沙箱图片 + 更新 AppStorage。 */
+  static removeDocument(id: string): void {
+    const doc: DocumentRecord | undefined = DocumentStore.getDocument(id);
+    if (doc !== undefined) {
+      for (const p of doc.originalImageUris) {
+        try {
+          if (fs.accessSync(p)) fs.unlinkSync(p);
+        } catch (e) {
+          hilog.warn(0x0000, TAG, 'removeDocument unlink failed: ' + JSON.stringify(e));
+        }
+      }
+    }
+    const list: DocumentRecord[] = DocumentStore.list().filter((d: DocumentRecord) => d.id !== id);
+    DocumentStore.writeIndex(list);
+    AppStorage.setOrCreate<DocumentRecord[]>('documents', list);
+    hilog.info(0x0000, TAG, `removeDocument ${id}, remain ${list.length}`);
+  }
+
   /** 把扫描结果文件复制进沙箱,返回沙箱内路径。复制失败抛错。 */
   static importImage(srcUri: string, docId: string, index: number): string {
     const dest: string = `${DocumentStore.filesDir}/${IMAGES_DIR}/${docId}_${index}.jpg`;

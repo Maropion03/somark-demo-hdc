@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<link rel="stylesheet" href="katex.min.css">
+<link rel="stylesheet" href="highlight.js.default.min.css">
+<link rel="stylesheet" href="somarkdown.css">
+<style>
+  html, body { margin: 0; padding: 0; background: #FFFFFF; color: #1A1A1A;
+    font-size: 15px; -webkit-text-size-adjust: 100%; }
+  #preview { padding: 12px 14px 40px; }
+  .somarkdown-container a { color: #FF8C00; }
+  .somarkdown-container h1, .somarkdown-container h2, .somarkdown-container h3 { color: #1A1A1A; }
+  img { max-width: 100%; height: auto; border-radius: 6px; }
+  table { border-color: #E5E5EA; }
+  ::selection { background: rgba(255,140,0,0.3); }
+</style>
+<script src="somarkdown.umd.min.js"></script>
+</head>
+<body>
+<div id="preview" class="somarkdown-container theme-light"></div>
+<script>
+  var smRenderer = null;
+  // 任意渲染错误 → 退化为原始内容(纯文本,保留换行),绝不显示报错
+  function showRaw(md) {
+    var pre = document.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.wordBreak = 'break-word';
+    pre.style.fontFamily = 'inherit';
+    pre.style.margin = '0';
+    pre.textContent = md || '';
+    var el = document.getElementById('preview');
+    el.innerHTML = '';
+    el.appendChild(pre);
+  }
+  function smRender(md) {
+    try {
+      if (!smRenderer && typeof SoMarkDown !== 'undefined') {
+        smRenderer = new SoMarkDown({ html: true, typographer: true,
+          lineNumbers: { enable: true, nested: true },
+          katex: { throwOnError: false, errorColor: '#9AA0A6', strict: false, trust: true },
+          smiles: { disableColors: false } });
+      }
+      if (!smRenderer) { showRaw(md); return; }
+      var html = smRenderer.render(md || '');
+      var el = document.getElementById('preview');
+      el.innerHTML = html;
+      // 局部渲染失败(如非法 SMILES 的黄底红字块)→ 用原始片段替换,不显示报错
+      var spans = el.querySelectorAll('span');
+      for (var i = 0; i < spans.length; i++) {
+        var sp = spans[i];
+        var st = (sp.getAttribute('style') || '');
+        var tx = (sp.textContent || '');
+        if (st.indexOf('background-color: yellow') >= 0 || tx.indexOf('SyntaxError Error for') >= 0) {
+          var m = tx.match(/SyntaxError Error for:\s*([^\]]*)\]/);
+          var raw = m ? m[1].trim() : tx;
+          sp.removeAttribute('style');
+          sp.textContent = raw;
+        }
+      }
+    } catch (e) {
+      // 整体渲染抛错 → 完全退化为原始 markdown 文本
+      showRaw(md);
+    }
+  }
+  window.__smReady = true;
+</script>
+</body>
+</html>

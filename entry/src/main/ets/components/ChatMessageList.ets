@@ -1,0 +1,138 @@
+import { ChatMessage, Citation } from '../model/Chat';
+import { CiteChip } from './CiteChip';
+import { MarkdownView } from './MarkdownView';
+import { Theme } from '../common/Theme';
+
+/** Chat 消息流(用户右浮、助手左浮 + Markdown 渲染 + 长按操作 + 重试 + 自动滚底)。 */
+@Component
+export struct ChatMessageList {
+  @Prop messages: ChatMessage[] = [];
+  @Prop @Watch('onScrollKeyChange') scrollKey: number = 0;
+  onLongPressMsg: (m: ChatMessage) => void = () => {};
+  onRetry: (m: ChatMessage) => void = () => {};
+  scroller: Scroller = new Scroller();
+
+  onScrollKeyChange(): void {
+    // 流式 / 新消息时自动滚到底
+    setTimeout(() => {
+      this.scroller.scrollEdge(Edge.Bottom);
+    }, 30);
+  }
+
+  isLastFailed(m: ChatMessage): boolean {
+    if (m.role !== 'assistant' || m.pending) return false;
+    if (m.content.startsWith('[调用失败]')) return true;
+    return false;
+  }
+
+  @Builder
+  citeRow(citations: Citation[]) {
+    if (citations.length > 0) {
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(citations, (c: Citation, idx: number) => {
+          Row() {
+            CiteChip({ cite: c, removable: false })
+          }
+          .margin({ right: 6, bottom: 6 })
+        }, (c: Citation, idx: number) => `cite_${idx}`)
+      }
+      .width('100%')
+      .margin({ bottom: 6 })
+    }
+  }
+
+  @Builder
+  userBubble(m: ChatMessage) {
+    Column() {
+      this.citeRow(m.citations)
+      Text(m.content)
+        .fontSize(15)
+        .fontColor(Theme.BUBBLE_USER_TEXT)
+        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .backgroundColor(Theme.BUBBLE_USER)
+        .borderRadius(14)
+        .gesture(LongPressGesture({ duration: 350 }).onAction(() => this.onLongPressMsg(m)))
+    }
+    .alignItems(HorizontalAlign.End)
+    .constraintSize({ maxWidth: '85%' })
+  }
+
+  @Builder
+  assistantBubble(m: ChatMessage) {
+    Column() {
+      if (m.pending && m.content.length === 0) {
+        Row() {
+          LoadingProgress().width(20).height(20).color(Theme.BRAND)
+          Text('思考中…').fontSize(13).fontColor(Theme.TEXT_SECONDARY).margin({ left: 8 })
+        }
+        .padding(12)
+        .backgroundColor(Theme.BUBBLE_ASSIST)
+        .borderRadius(14)
+        .border({ width: 0.5, color: Theme.BORDER })
+      } else {
+        Column() {
+          MarkdownView({ text: m.content, baseColor: Theme.BUBBLE_ASSIST_TEXT })
+        }
+        .constraintSize({ maxWidth: '84%' })
+        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .backgroundColor(Theme.BUBBLE_ASSIST)
+        .borderRadius(14)
+        .border({ width: 0.5, color: Theme.BORDER })
+        .gesture(LongPressGesture({ duration: 350 }).onAction(() => this.onLongPressMsg(m)))
+
+        if (this.isLastFailed(m)) {
+          Row() {
+            Text('↻ 重试')
+              .fontSize(12)
+              .fontColor(Theme.BRAND)
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .backgroundColor(Theme.BRAND_SOFT)
+              .borderRadius(10)
+              .onClick(() => this.onRetry(m))
+          }
+          .margin({ top: 4 })
+        }
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+  }
+
+  build() {
+    Scroll(this.scroller) {
+      Column({ space: 12 }) {
+        if (this.messages.length === 0) {
+          Column() {
+            Text('从底部抽屉拖入文档,或直接提问')
+              .fontSize(14)
+              .fontColor(Theme.TEXT_HINT)
+          }
+          .width('100%')
+          .padding({ top: 80 })
+        } else {
+          ForEach(this.messages, (m: ChatMessage) => {
+            if (m.role === 'user') {
+              Row() {
+                Column().layoutWeight(1)
+                this.userBubble(m)
+              }
+              .width('100%')
+            } else {
+              Row() {
+                this.assistantBubble(m)
+                Column().layoutWeight(1)
+              }
+              .width('100%')
+            }
+          }, (m: ChatMessage) => m.id + '_' + m.content.length + '_' + (m.pending ? '1' : '0'))
+        }
+      }
+      .width('100%')
+      .padding({ top: 8, bottom: 12 })
+    }
+    .scrollBar(BarState.Off)
+    .width('100%')
+    .height('100%')
+    .align(Alignment.TopStart)
+  }
+}

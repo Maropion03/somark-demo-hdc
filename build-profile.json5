@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "/Users/jerryning/.ohos/config/default_SoScan_3lpkFero0VjTPt3_edcYiuDAkWhzHsgB0d1SFOKuZKA=.cer",
+          "certpath": "C:\\Users\\94222\\.ohos\\config\\default_somark-demo-hdc_o3bRd5BVJViMa_LmGa39Q-zq52faZpeHz066SZMOF2A=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B57F3AA88368C248B5C29FDCD8C6258817539B188ACEA56A1FDFAD7E890B587C91B7709A779049C",
-          "profile": "/Users/jerryning/.ohos/config/default_SoScan_3lpkFero0VjTPt3_edcYiuDAkWhzHsgB0d1SFOKuZKA=.p7b",
+          "keyPassword": "0000001B07D13EE461D68BF586512751C58F5C8F25553250D6FA12A24B1E7C9CA744BF745A371598CA98F9",
+          "profile": "C:\\Users\\94222\\.ohos\\config\\default_somark-demo-hdc_o3bRd5BVJViMa_LmGa39Q-zq52faZpeHz066SZMOF2A=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "/Users/jerryning/.ohos/config/default_SoScan_3lpkFero0VjTPt3_edcYiuDAkWhzHsgB0d1SFOKuZKA=.p12",
-          "storePassword": "0000001BA87103E7A5FB4E6B52B7ACD5A7126E7B309B74198ADA99248A2467A371C4F5AD5404D69DE2C20B"
+          "storeFile": "C:\\Users\\94222\\.ohos\\config\\default_somark-demo-hdc_o3bRd5BVJViMa_LmGa39Q-zq52faZpeHz066SZMOF2A=.p12",
+          "storePassword": "0000001B682AAED4EF4B3B30A06CA181914BC4CF3F61B5859E01766EEF0A5748594853B2E7CBBF2AB48842"
         }
       }
     ],
