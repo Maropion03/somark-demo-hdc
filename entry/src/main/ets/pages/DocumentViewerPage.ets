@@ -9,6 +9,7 @@ import { ShareHelper } from '../services/ShareHelper';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { promptAction, display } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
+import { image } from '@kit.ImageKit';
 import { Theme } from '../common/Theme';
 
 const TAG: string = 'SoScan';
@@ -37,6 +38,7 @@ export struct DocumentViewerPage {
   @State mdFullDoc: boolean = false;
   @State pages: SmPageInfo[] = [];
   @State screenW: number = 360;
+  @State imgAspect: number[] = [];   // 各页图片真实 高/宽 比
   // 跨页选区(flat 位置 = 页号 + 该页 block 数组下标)
   @State anchorPage: number = -1;
   @State anchorIdx: number = -1;
@@ -56,6 +58,17 @@ export struct DocumentViewerPage {
     const doc = this.currentDoc();
     if (doc !== undefined) {
       this.pages = parseSmDoc(doc.parsedJson);
+      // 读取各页图片真实像素比例(解析前也能正确定高,避免横图被拉伸)
+      const aspects: number[] = [];
+      for (const uri of doc.originalImageUris) {
+        let r: number = 1.414;
+        try {
+          const sz: image.Size = image.createImageSource(uri).getImageInfoSync().size;
+          if (sz.width > 0) r = sz.height / sz.width;
+        } catch (e) { r = 1.414; }
+        aspects.push(r);
+      }
+      this.imgAspect = aspects;
     }
   }
 
@@ -64,6 +77,10 @@ export struct DocumentViewerPage {
   }
 
   pageHeight(idx: number): number {
+    // 优先用图片真实比例(解析前也准),否则退化用 page_size,再退化 A4
+    if (idx < this.imgAspect.length && this.imgAspect[idx] > 0) {
+      return this.screenW * this.imgAspect[idx];
+    }
     if (idx < this.pages.length) {
       const p: SmPageInfo = this.pages[idx];
       if (p.w > 0 && p.h > 0) return this.screenW * (p.h / p.w);
@@ -414,8 +431,13 @@ export struct DocumentViewerPage {
             parsing: this.currentDoc()!.status === 'parsing',
             fullDoc: this.mdFullDoc,
             fullMarkdown: this.currentDoc()!.parsedMarkdown,
+            totalPages: this.currentDoc()!.originalImageUris.length,
             docName: this.currentDoc()!.name,
-            onClose: () => { this.mdVisible = false; }
+            onClose: () => { this.mdVisible = false; },
+            onPrevPage: () => { if (this.currentPage > 0) this.currentPage -= 1; },
+            onNextPage: () => {
+              if (this.currentPage < this.currentDoc()!.originalImageUris.length - 1) this.currentPage += 1;
+            }
           })
         }
 

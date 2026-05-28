@@ -38,6 +38,13 @@
     el.innerHTML = '';
     el.appendChild(pre);
   }
+  function reportHeight() {
+    try {
+      if (window.smHost && smHost.setHeight) {
+        smHost.setHeight(String(document.body.scrollHeight));
+      }
+    } catch (e) {}
+  }
   function smRender(md) {
     try {
       if (!smRenderer && typeof SoMarkDown !== 'undefined') {
@@ -67,6 +74,14 @@
       // 整体渲染抛错 → 完全退化为原始 markdown 文本
       showRaw(md);
     }
+    // 回传内容高度(图片异步加载完再报一次)
+    reportHeight();
+    setTimeout(reportHeight, 120);
+    setTimeout(reportHeight, 400);
+    try {
+      var imgs = document.querySelectorAll('#preview img');
+      for (var k = 0; k < imgs.length; k++) { imgs[k].onload = reportHeight; }
+    } catch (e2) {}
   }
   window.__smReady = true;
 </script>

@@ -49,9 +49,12 @@ export struct PageMarkdownSheet {
   @Prop parsing: boolean = false;
   @Prop fullDoc: boolean = false;       // true=整篇文档 markdown(解析按钮);false=当前页(左滑)
   @Prop fullMarkdown: string = '';      // 整篇 markdown(fullDoc 时用)
+  @Prop totalPages: number = 1;
   docName: string = '';
 
   onClose: () => void = () => {};
+  onPrevPage: () => void = () => {};
+  onNextPage: () => void = () => {};
 
   sheetMarkdown(): string {
     if (this.fullDoc) return this.fullMarkdown;
@@ -68,14 +71,28 @@ export struct PageMarkdownSheet {
 
         Column() {
           Row() {
-            Text(this.fullDoc ? '全文 · Markdown' : `第 ${this.pageIndex + 1} 页 · Markdown`)
+            if (!this.fullDoc && this.totalPages > 1) {
+              Text('‹')
+                .fontSize(20).fontColor(this.pageIndex > 0 ? Theme.BRAND : Theme.TEXT_HINT)
+                .width(28).textAlign(TextAlign.Center)
+                .onClick(() => { if (this.pageIndex > 0) this.onPrevPage(); })
+            }
+            Text(this.fullDoc ? '全文 · Markdown' : `第 ${this.pageIndex + 1} / ${this.totalPages} 页`)
               .fontSize(14)
               .fontColor(Theme.TEXT_PRIMARY)
               .fontWeight(FontWeight.Medium)
               .layoutWeight(1)
-            Text('收起 ›')
+              .textAlign(TextAlign.Center)
+            if (!this.fullDoc && this.totalPages > 1) {
+              Text('›')
+                .fontSize(20).fontColor(this.pageIndex < this.totalPages - 1 ? Theme.BRAND : Theme.TEXT_HINT)
+                .width(28).textAlign(TextAlign.Center)
+                .onClick(() => { if (this.pageIndex < this.totalPages - 1) this.onNextPage(); })
+            }
+            Text('收起')
               .fontSize(14)
               .fontColor(Theme.BRAND)
+              .padding({ left: 6 })
               .onClick(() => this.onClose())
           }
           .width('100%')

@@ -69,7 +69,19 @@ export struct ChatMessageList {
         .backgroundColor(Theme.BUBBLE_ASSIST)
         .borderRadius(14)
         .border({ width: 0.5, color: Theme.BORDER })
+      } else if (m.pending) {
+        // 流式中:纯文本逐字更新,不走 Web(避免每 token 重渲闪烁)
+        Text(m.content)
+          .fontSize(15)
+          .fontColor(Theme.BUBBLE_ASSIST_TEXT)
+          .lineHeight(22)
+          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+          .backgroundColor(Theme.BUBBLE_ASSIST)
+          .borderRadius(14)
+          .border({ width: 0.5, color: Theme.BORDER })
+          .constraintSize({ maxWidth: '84%' })
       } else {
+        // 生成完成:自研 Markdown 渲染(原生自然撑高,不闪不卡)
         Column() {
           MarkdownView({ text: m.content, baseColor: Theme.BUBBLE_ASSIST_TEXT })
         }
@@ -124,7 +136,9 @@ export struct ChatMessageList {
               }
               .width('100%')
             }
-          }, (m: ChatMessage) => m.id + '_' + m.content.length + '_' + (m.pending ? '1' : '0'))
+          }, (m: ChatMessage) => m.pending
+              ? m.id + '_p_' + m.content.length   // 流式中:含长度,逐字刷新纯文本(轻量)
+              : m.id + '_d')                       // 完成:稳定 key,somarkdown 只渲染一次
         }
       }
       .width('100%')
