@@ -13,6 +13,10 @@
   .somarkdown-container a { color: #FF8C00; }
   .somarkdown-container h1, .somarkdown-container h2, .somarkdown-container h3 { color: #1A1A1A; }
   img { max-width: 100%; height: auto; border-radius: 6px; }
+  /* 图片框内的图放大到铺满,避免太小看不清 */
+  #preview .img-frame, #preview figure.img-frame { width: 100% !important; max-width: 100% !important; }
+  #preview .img-frame img, #preview figure img, #preview img {
+    width: 100% !important; height: auto !important; max-width: 100% !important; }
   table { border-color: #E5E5EA; }
   ::selection { background: rgba(255,140,0,0.3); }
 </style>

@@ -1,217 +1,54 @@
 import { fileUri } from '@kit.CoreFileKit';
 import { SmPageInfo, SmBlock, blockTypeColor } from '../model/SmDoc';
-import { BlockRef } from '../model/Chat';
-import { MarkdownWeb } from './MarkdownWeb';
-import { Theme } from '../common/Theme';
 
 /**
- * 单页扫描图 + bbox 选区(PRD §7)。
- * 交互(#7):
- *  - 点按某 block → 直接选中该 block 并弹操作卡;
- *  - 长按按住不松 → 进入框选,手指下滑可多选(锚点 block → 当前 block 区间),松手才弹操作卡。
- * 选区高亮按 block 类型着色(#5)。操作卡:Markdown 预览占主体 + 右侧半透明 Add to Chat(#3)。
+ * 单页扫描图 + bbox 选区高亮层(PRD §7)。
+ * 本组件只负责:① 渲染图片;② 按父级下发的 selectedIdxs 画高亮;③ 把点按/长按手势的**全局坐标**转给父级。
+ * 选区状态、跨页 hit-test、操作卡都在父级(DocumentViewerPage)统一处理 —— 以支持跨页多选。
  */
 @Component
 export struct BboxImagePage {
   filePath: string = '';
   page: SmPageInfo = { pageNum: 0, w: 0, h: 0, blocks: [] };
-  docId: string = '';
-  docName: string = '';
   pageIndex: number = 0;
-  onDragActive: (active: boolean) => void = () => {};  // 长按框选中(禁列表滚动/挡左滑)
-  onCardOpen: () => void = () => {};                   // 卡片打开(父级据此收起 markdown 抽屉)
-  onAddCitation: (ref: BlockRef) => void = () => {};
-  @Prop @Watch('onCloseToken') closeToken: number = 0; // 父级 ++ 时强制收卡
+  @Prop selectedIdxs: number[] = [];   // 本页被选中的 block 数组下标(父级下发)
+  // 几何上报:本页图片显示宽/高 + 全局 Y
+  onGeometry: (pageIndex: number, globalY: number, w: number, h: number) => void = () => {};
+  // 手势转发(全局坐标)
+  onTapAt: (gx: number, gy: number) => void = () => {};
+  onPressStart: (gx: number, gy: number) => void = () => {};
+  onPressMove: (gx: number, gy: number) => void = () => {};
+  onPressEnd: () => void = () => {};
 
-  onCloseToken(): void {
-    if (this.carding || this.pressing) this.closeSelection();
-  }
-
-  @State boxW: number = 0;
-  @State boxH: number = 0;
-  @State anchorIdx: number = -1;
-  @State curIdx: number = -1;
-  @State pressing: boolean = false;   // 长按框选进行中(不弹卡)
-  @State carding: boolean = false;    // 操作卡显示中
+  @State private boxW: number = 0;
 
   fitScale(): number {
     return this.page.w > 0 && this.boxW > 0 ? this.boxW / this.page.w : 1;
   }
 
-  // 容器框:其 bbox 包住了其它 block 的中心点 → 视为大框,不可选
-  isContainer(i: number): boolean {
-    const b: SmBlock = this.page.blocks[i];
-    for (let j = 0; j < this.page.blocks.length; j++) {
-      if (j === i) continue;
-      const o: SmBlock = this.page.blocks[j];
-      const cx: number = (o.x1 + o.x2) / 2;
-      const cy: number = (o.y1 + o.y2) / 2;
-      if (cx > b.x1 && cx < b.x2 && cy > b.y1 && cy < b.y2) return true;
-    }
-    return false;
+  blockByIdx(arrIdx: number): SmBlock | undefined {
+    return arrIdx >= 0 && arrIdx < this.page.blocks.length ? this.page.blocks[arrIdx] : undefined;
   }
 
-  // 命中"最内层"且非容器的 block;纯大框区域返回 -1(不选、不闪)
-  hitBlock(x: number, y: number): number {
-    const s: number = this.fitScale();
-    let best: number = -1;
-    let bestArea: number = Number.MAX_VALUE;
-    for (let i = 0; i < this.page.blocks.length; i++) {
-      if (this.isContainer(i)) continue;
-      const b: SmBlock = this.page.blocks[i];
-      if (x >= b.x1 * s && x <= b.x2 * s && y >= b.y1 * s && y <= b.y2 * s) {
-        const area: number = (b.x2 - b.x1) * (b.y2 - b.y1);
-        if (area < bestArea) { bestArea = area; best = i; }
-      }
-    }
-    return best;
-  }
-
-  /** 当前选区数组下标范围(anchor..cur)。 */
-  selRange(): number[] {
-    if (this.anchorIdx < 0 || this.curIdx < 0) return [];
-    const lo: number = Math.min(this.anchorIdx, this.curIdx);
-    const hi: number = Math.max(this.anchorIdx, this.curIdx);
-    const arr: number[] = [];
-    for (let i = lo; i <= hi; i++) arr.push(i);
-    return arr;
-  }
-
-  selectedBlocks(): SmBlock[] {
-    return this.selRange().map((i: number) => this.page.blocks[i]);
-  }
-
-  selectedMarkdown(): string {
-    const parts: string[] = [];
-    for (const b of this.selectedBlocks()) {
-      // figure:图片 + 图片理解(content),与 Markdown 抽屉保持一致
-      if (b.type === 'figure' && b.imgUrl.length > 0) {
-        parts.push(`![](${b.imgUrl})`);
-        if (b.content.length > 0) parts.push(b.content);
-      } else if (b.content.length > 0) {
-        parts.push(b.content);
-      }
-    }
-    return parts.join('\n\n');
-  }
-
-  // 点按:单 block 选中 + 弹卡
-  onTap(x: number, y: number): void {
-    const idx: number = this.hitBlock(x, y);
-    if (idx < 0) return;
-    this.anchorIdx = idx;
-    this.curIdx = idx;
-    this.carding = true;
-    this.onCardOpen();
-  }
-
-  // 长按按住:进入框选,记录锚点(不弹卡)
-  onLongStart(x: number, y: number): void {
-    const idx: number = this.hitBlock(x, y);
-    if (idx < 0) return;
-    this.anchorIdx = idx;
-    this.curIdx = idx;
-    this.pressing = true;
-    this.carding = false;
-    this.onDragActive(true);
-  }
-
-  // 长按移动:扩展到当前 block
-  onLongMove(x: number, y: number): void {
-    if (!this.pressing) return;
-    const idx: number = this.hitBlock(x, y);
-    if (idx >= 0) this.curIdx = idx;
-  }
-
-  // 长按松手:弹卡
-  onLongEnd(): void {
-    if (!this.pressing) return;
-    this.pressing = false;
-    this.onDragActive(false);
-    if (this.anchorIdx >= 0) { this.carding = true; this.onCardOpen(); }
-  }
-
-  closeSelection(): void {
-    this.pressing = false;
-    this.carding = false;
-    this.anchorIdx = -1;
-    this.curIdx = -1;
-    this.onDragActive(false);
-  }
-
-  doAdd(): void {
-    const blocks: SmBlock[] = this.selectedBlocks();
-    if (blocks.length === 0) { this.closeSelection(); return; }
-    const ref: BlockRef = {
-      kind: 'block',
-      docId: this.docId,
-      docName: this.docName,
-      pageIndex: this.pageIndex,
-      blockIndices: blocks.map((b: SmBlock) => b.idx),
-      previewText: this.selectedMarkdown()
-    };
-    this.onAddCitation(ref);
-    this.closeSelection();
-  }
-
-  /** #RRGGBB → #AARRGGBB(ArkUI alpha 前置)。 */
   fillColor(type: string): string {
-    const c: string = blockTypeColor(type);
-    // 图片块不填充(避免遮住图),仅描边
     if (type === 'figure' || type === 'qr-code') return '#00000000';
-    return '#33' + c.substring(1);
+    return '#33' + blockTypeColor(type).substring(1);
   }
 
   @Builder
-  selectionHighlight() {
-    ForEach(this.selectedBlocks(), (b: SmBlock) => {
-      Column()
-        .position({ x: b.x1 * this.fitScale(), y: b.y1 * this.fitScale() })
-        .width((b.x2 - b.x1) * this.fitScale())
-        .height((b.y2 - b.y1) * this.fitScale())
-        .backgroundColor(this.fillColor(b.type))
-        .border({ width: 2, color: blockTypeColor(b.type) })
-        .borderRadius(2)
-        .hitTestBehavior(HitTestMode.None)
-    }, (b: SmBlock) => `sel_${b.idx}`)
-  }
-
-  /** 操作卡(#3):Markdown 预览主体 + 右侧半透明 Add to Chat。 */
-  @Builder
-  optionCard() {
-    Column() {
-      Row() {
-        Text('选中内容 · 长按拖动可多选')
-          .fontSize(12).fontColor(Theme.TEXT_SECONDARY).layoutWeight(1)
-        Text('取消')
-          .fontSize(13).fontColor(Theme.TEXT_SECONDARY)
-          .onClick(() => this.closeSelection())
+  highlights() {
+    ForEach(this.selectedIdxs, (arrIdx: number) => {
+      if (this.blockByIdx(arrIdx) !== undefined) {
+        Column()
+          .position({ x: this.blockByIdx(arrIdx)!.x1 * this.fitScale(), y: this.blockByIdx(arrIdx)!.y1 * this.fitScale() })
+          .width((this.blockByIdx(arrIdx)!.x2 - this.blockByIdx(arrIdx)!.x1) * this.fitScale())
+          .height((this.blockByIdx(arrIdx)!.y2 - this.blockByIdx(arrIdx)!.y1) * this.fitScale())
+          .backgroundColor(this.fillColor(this.blockByIdx(arrIdx)!.type))
+          .border({ width: 2, color: blockTypeColor(this.blockByIdx(arrIdx)!.type) })
+          .borderRadius(2)
+          .hitTestBehavior(HitTestMode.None)
       }
-      .width('100%')
-      .padding({ top: 12, bottom: 6 })
-
-      MarkdownWeb({ markdown: this.selectedMarkdown() })
-        .layoutWeight(1)
-        .width('100%')
-
-      // Add to Chat:独立框,左边缘略过中线,靠右
-      Row() {
-        Column().layoutWeight(1)
-        Button('Add to Chat')
-          .width('54%')
-          .height(44)
-          .fontSize(15)
-          .fontColor(Theme.TEXT_ON_BRAND)
-          .backgroundColor(Theme.BRAND)
-          .borderRadius(22)
-          .onClick(() => this.doAdd())
-      }
-      .width('100%')
-      .padding({ top: 8, bottom: 10 })
-    }
-    .width('100%')
-    .height('100%')
-    .padding({ left: 16, right: 16 })
+    }, (arrIdx: number) => `sel_${this.pageIndex}_${arrIdx}`)
   }
 
   build() {
@@ -223,46 +60,35 @@ export struct BboxImagePage {
         .draggable(false)
         .onAreaChange((_o: Area, n: Area) => {
           this.boxW = n.width as number;
-          this.boxH = n.height as number;
+          this.onGeometry(this.pageIndex, n.globalPosition.y as number, n.width as number, n.height as number);
         })
         .gesture(
           GestureGroup(GestureMode.Exclusive,
             TapGesture({ count: 1 })
               .onAction((e: GestureEvent) => {
                 const f = e.fingerList.length > 0 ? e.fingerList[0] : undefined;
-                if (f !== undefined) this.onTap(f.localX, f.localY);
+                if (f !== undefined) this.onTapAt(f.globalX, f.globalY);
               }),
-            // 长按 → 拖动多选;松手弹卡
             GestureGroup(GestureMode.Sequence,
               LongPressGesture({ fingers: 1, repeat: false, duration: 250 })
                 .onAction((e: GestureEvent) => {
                   const f = e.fingerList.length > 0 ? e.fingerList[0] : undefined;
-                  if (f !== undefined) this.onLongStart(f.localX, f.localY);
+                  if (f !== undefined) this.onPressStart(f.globalX, f.globalY);
                 })
-                .onActionEnd(() => this.onLongEnd()),
+                .onActionEnd(() => this.onPressEnd()),
               PanGesture({ fingers: 1, direction: PanDirection.All, distance: 5 })
                 .onActionUpdate((e: GestureEvent) => {
                   const f = e.fingerList.length > 0 ? e.fingerList[0] : undefined;
-                  if (f !== undefined) this.onLongMove(f.localX, f.localY);
+                  if (f !== undefined) this.onPressMove(f.globalX, f.globalY);
                 })
-                .onActionEnd(() => this.onLongEnd())
+                .onActionEnd(() => this.onPressEnd())
             )
           )
         )
 
-      if (this.anchorIdx >= 0) {
-        this.selectionHighlight()
-      }
+      this.highlights()
     }
     .width('100%')
     .height('100%')
-    .bindSheet(this.carding, this.optionCard(), {
-      detents: [240, 420],
-      preferType: SheetType.BOTTOM,
-      enableOutsideInteractive: true,
-      showClose: false,
-      backgroundColor: Theme.BG_CARD,
-      onWillDismiss: () => { this.closeSelection(); }
-    })
   }
 }
