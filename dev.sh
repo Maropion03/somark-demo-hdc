@@ -11,7 +11,7 @@ NODE_BIN="$DEVECO/Contents/tools/node/bin"
 
 PROJ="$(cd "$(dirname "$0")" && pwd)"
 HAP="$PROJ/entry/build/default/outputs/default/entry-default-signed.hap"
-BUNDLE="ai.somark.demo"
+BUNDLE="cn.somark.demo"
 ABILITY="EntryAbility"
 
 build()   { cd "$PROJ" && PATH="$NODE_BIN:$PATH" "$HVIGORW" assembleHap; }

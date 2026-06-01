@@ -29,5 +29,5 @@
 ## 关键事实
 
 - 测试机:HUAWEI Mate 80 Pro,HarmonyOS 6.0.0 / API 22,设备号 `5JV0225A17000048`。
-- 工程:`SoScan/`,`compatibleSdkVersion` 6.0.0(22),bundle `ai.somark.demo`,入口 `EntryAbility`。
+- 工程:`SoScan/`,`compatibleSdkVersion` 6.0.0(22),bundle `cn.somark.demo`,入口 `EntryAbility`。
 - 工作分支:`nwk/<type>/<kebab-topic>` (type ∈ feat/fix/chore/docs/refactor/test),通过 MR 合入 `main`;远端 `gitlab.soulcode.cn/somark/edge_infer/somark-demo-hdc`(glab CLI)。

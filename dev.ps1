@@ -20,7 +20,7 @@ $JBR      = Join-Path $DEVECO 'jbr'
 
 $PROJ    = $PSScriptRoot
 $HAP     = Join-Path $PROJ 'entry\build\default\outputs\default\entry-default-signed.hap'
-$BUNDLE  = 'ai.somark.demo'
+$BUNDLE  = 'cn.somark.demo'
 $ABILITY = 'EntryAbility'
 
 foreach ($p in @($HVIGORW, $HDC, $NODE_BIN, $JBR)) {
