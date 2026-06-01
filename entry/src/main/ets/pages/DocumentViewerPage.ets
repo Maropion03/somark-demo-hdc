@@ -3,13 +3,17 @@ import { PageMarkdownSheet } from '../components/PageMarkdownSheet';
 import { BboxImagePage } from '../components/BboxImagePage';
 import { MarkdownWeb } from '../components/MarkdownWeb';
 import { BlockRef, Citation } from '../model/Chat';
-import { SmPageInfo, SmBlock, parseSmDoc } from '../model/SmDoc';
+import { SmPageInfo, SmBlock, parseSmDoc, classifyBlock, BlockEntity } from '../model/SmDoc';
 import { DocumentStore } from '../services/DocumentStore';
 import { ShareHelper } from '../services/ShareHelper';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { call } from '@kit.TelephonyKit';
 import { promptAction, display } from '@kit.ArkUI';
-import { common } from '@kit.AbilityKit';
+import { common, Want, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
 import { image } from '@kit.ImageKit';
+import { geoLocationManager } from '@kit.LocationKit';
+import { mapCommon, map, MapComponent, petalMaps } from '@kit.MapKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { Theme } from '../common/Theme';
 
 const TAG: string = 'SoScan';
@@ -31,7 +35,8 @@ interface Hit {
 @Component
 export struct DocumentViewerPage {
   @Consume('pathStack') pathStack: NavPathStack;
-  @StorageLink('documents') documents: DocumentRecord[] = [];
+  @StorageLink('documents') @Watch('onDocsUpdate') documents: DocumentRecord[] = [];
+  private lastParsedJson: string = '';
   docId: string = '';
   @State currentPage: number = 0;
   @State mdVisible: boolean = false;
@@ -49,6 +54,17 @@ export struct DocumentViewerPage {
   private pageTopY: number[] = [];    // 各页图片全局 Y(onGeometry 上报)
   scroller: Scroller = new Scroller();
 
+  // ===== 地址 → 原生地图预览(Map Kit)=====
+  @State geoLoading: boolean = false;   // 地理编码进行中
+  @State geoFailed: boolean = false;    // 地理编码失败 → 卡片里给「在地图打开」兜底
+  @State mapLat: number = 0;            // 0 表示尚未拿到坐标
+  @State mapLng: number = 0;
+  @State mapAddr: string = '';
+  private mapOptions: mapCommon.MapOptions = {
+    position: { target: { latitude: 39.9042, longitude: 116.4074 }, zoom: 10 }
+  };
+  private mapController?: map.MapComponentController;
+
   aboutToAppear(): void {
     try {
       this.screenW = this.getUIContext().px2vp(display.getDefaultDisplaySync().width);
@@ -58,6 +74,7 @@ export struct DocumentViewerPage {
     const doc = this.currentDoc();
     if (doc !== undefined) {
       this.pages = parseSmDoc(doc.parsedJson);
+      this.lastParsedJson = doc.parsedJson;
       // 读取各页图片真实像素比例(解析前也能正确定高,避免横图被拉伸)
       const aspects: number[] = [];
       for (const uri of doc.originalImageUris) {
@@ -69,6 +86,17 @@ export struct DocumentViewerPage {
         aspects.push(r);
       }
       this.imgAspect = aspects;
+    }
+  }
+
+  // documents 更新时(解析完成 status:parsing→done,parsedJson 由空变满)重算 pages,
+  // 避免"先进页面再等解析"时点击/长按无反应。
+  onDocsUpdate(): void {
+    const doc = this.currentDoc();
+    if (doc === undefined) return;
+    if (doc.parsedJson !== this.lastParsedJson) {
+      this.lastParsedJson = doc.parsedJson;
+      this.pages = parseSmDoc(doc.parsedJson);
     }
   }
 
@@ -169,19 +197,30 @@ export struct DocumentViewerPage {
     let loP: number = this.anchorPage; let hiP: number = this.curPage;
     if (!this.leq(this.anchorPage, this.anchorIdx, this.curPage, this.curIdx)) { loP = this.curPage; hiP = this.anchorPage; }
     const parts: string[] = [];
+
+    // 先输出解析内容(文本/图片块)
     for (let p = loP; p <= hiP; p++) {
       const sel: number[] = this.selectedPerPage(p);
       const blocks: SmBlock[] = this.pageInfo(p).blocks;
       for (const i of sel) {
         const b: SmBlock = blocks[i];
         if (b.type === 'figure' && b.imgUrl.length > 0) {
-          parts.push(`![](${b.imgUrl})`);
-          if (b.content.length > 0) parts.push(b.content);
+          // img-frame:图片在前,图片理解在后(都在框内,somarkdown.css 的 ::before 加"图片理解"标签)
+          const desc: string = b.content.length > 0 ? `<p>${b.content}</p>` : '';
+          parts.push(`<figure class="img-frame"><img src="${b.imgUrl}" />${desc}</figure>`);
         } else if (b.content.length > 0) {
           parts.push(b.content);
         }
       }
     }
+
+    // 网址:解析内容**之下**直接 iframe 该 URL(纯窗口,无标签)。
+    // 地址:不再走 iframe(高德 uri.amap.com 嵌入会弹验证码),改用操作卡内的原生 MapComponent 预览。
+    const entity: BlockEntity | null = this.selectedEntity();
+    if (entity !== null && entity.kind === 'url') {
+      parts.push(`<iframe class="entity-preview" src="${entity.value}" sandbox="allow-scripts allow-same-origin"></iframe>`);
+    }
+
     return parts.join('\n\n');
   }
 
@@ -193,6 +232,7 @@ export struct DocumentViewerPage {
     this.curPage = hit.page; this.curIdx = hit.idx;
     this.mdVisible = false;
     this.carding = true;
+    this.prepareEntityPreview();
   }
 
   onPressStart(gx: number, gy: number): void {
@@ -213,7 +253,7 @@ export struct DocumentViewerPage {
   onPressEnd(): void {
     if (!this.pressing) return;
     this.pressing = false;
-    if (this.anchorPage >= 0) { this.mdVisible = false; this.carding = true; }
+    if (this.anchorPage >= 0) { this.mdVisible = false; this.carding = true; this.prepareEntityPreview(); }
   }
 
   closeCard(): void {
@@ -221,6 +261,7 @@ export struct DocumentViewerPage {
     this.pressing = false;
     this.anchorPage = -1; this.anchorIdx = -1;
     this.curPage = -1; this.curIdx = -1;
+    this.resetMapState();
   }
 
   doAdd(): void {
@@ -239,6 +280,165 @@ export struct DocumentViewerPage {
     AppStorage.setOrCreate<Citation[]>('pendingCitations', [...pending, ref]);
     const param: ChatPageParam = { drawerOpen: false };
     this.pathStack.pushPath({ name: 'ChatPage', param: param });
+  }
+
+  /** 单 block 选区 + 该 block 命中电话/网址/地址 → 返回实体,否则 null。 */
+  selectedEntity(): BlockEntity | null {
+    if (this.anchorPage < 0 || this.curPage < 0) return null;
+    if (this.anchorPage !== this.curPage || this.anchorIdx !== this.curIdx) return null;
+    const blocks: SmBlock[] = this.pageInfo(this.anchorPage).blocks;
+    if (this.anchorIdx < 0 || this.anchorIdx >= blocks.length) return null;
+    return classifyBlock(blocks[this.anchorIdx].content);
+  }
+
+  // ===== 三种实体动作 =====
+  dialPhone(num: string): void {
+    try {
+      call.makeCall(num, (err: Object) => {
+        if (err) {
+          hilog.error(0x0000, TAG, 'dial failed: ' + JSON.stringify(err));
+          promptAction.showToast({ message: '拨号失败' });
+        }
+      });
+    } catch (e) {
+      promptAction.showToast({ message: '拨号失败' });
+    }
+  }
+
+  abilityCb(action: string): common.AbilityStartCallback {
+    return {
+      onError: (code: number, name: string, msg: string) => {
+        hilog.error(0x0000, TAG, `${action} err: ${code} ${name} ${msg}`);
+        promptAction.showToast({ message: action + '失败' });
+      }
+    };
+  }
+
+  openUrl(url: string): void {
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      // 通用 ViewData + browsable entity:任何注册了浏览能力的 app(系统浏览器/华为浏览器)都接得住
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: url
+      };
+      ctx.startAbility(want).catch((e: Error) => {
+        hilog.error(0x0000, TAG, 'openUrl failed: ' + e.message);
+        promptAction.showToast({ message: '打开网址失败' });
+      });
+    } catch (e) {
+      promptAction.showToast({ message: '打开网址失败' });
+    }
+  }
+
+  /** 拉起华为 Petal 地图:有坐标走 POI 详情(更准),无坐标退回关键字搜索。 */
+  openMap(addr: string): void {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (this.mapLat !== 0 || this.mapLng !== 0) {
+      const params: petalMaps.PoiDetailParams = {
+        destinationPosition: { latitude: this.mapLat, longitude: this.mapLng },
+        destinationName: addr,
+        zoom: 16,
+        coordinateType: mapCommon.CoordinateType.GCJ02   // geocode 返回国测局坐标系
+      };
+      petalMaps.openMapPoiDetail(ctx, params).catch((e: BusinessError) => {
+        hilog.error(0x0000, TAG, `openMapPoiDetail failed ${e.code}: ${e.message}`);
+        this.openMapSearch(ctx, addr);
+      });
+    } else {
+      this.openMapSearch(ctx, addr);
+    }
+  }
+
+  /** 无坐标时:用地址文字在 Petal 地图里搜索。 */
+  openMapSearch(ctx: common.UIAbilityContext, addr: string): void {
+    petalMaps.openMapTextSearch(ctx, { destinationName: addr }).catch((e: BusinessError) => {
+      hilog.error(0x0000, TAG, `openMapTextSearch failed ${e.code}: ${e.message}`);
+      promptAction.showToast({ message: '打开地图失败' });
+    });
+  }
+
+  // ===== 地址 → 原生地图预览 =====
+  /** 选区变化后调用:命中地址则地理编码(地址文本→经纬度),供操作卡内 MapComponent 定位打点。 */
+  prepareEntityPreview(): void {
+    this.resetMapState();
+    const e: BlockEntity | null = this.selectedEntity();
+    if (e === null || e.kind !== 'address') return;
+    this.mapAddr = e.value;
+    this.geoLoading = true;
+    this.ensureLocationPerm().then(() => this.geocode(e.value));
+  }
+
+  resetMapState(): void {
+    this.geoLoading = false;
+    this.geoFailed = false;
+    this.mapLat = 0;
+    this.mapLng = 0;
+    this.mapAddr = '';
+    try { this.mapController?.clear(); } catch (e) { }
+  }
+
+  /** 地理编码用到定位服务,先申请模糊定位权限(失败也继续尝试,部分机型无需授权即可编码)。 */
+  async ensureLocationPerm(): Promise<void> {
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const perms: Permissions[] = ['ohos.permission.APPROXIMATELY_LOCATION'];
+      await abilityAccessCtrl.createAtManager().requestPermissionsFromUser(ctx, perms);
+    } catch (e) {
+      hilog.warn(0x0000, TAG, 'request location perm failed: ' + JSON.stringify(e));
+    }
+  }
+
+  geocode(addr: string): void {
+    geoLocationManager.getAddressesFromLocationName({ description: addr, maxItems: 1 })
+      .then((arr: geoLocationManager.GeoAddress[]) => {
+        this.geoLoading = false;
+        const a: geoLocationManager.GeoAddress | undefined = arr.length > 0 ? arr[0] : undefined;
+        if (a !== undefined && a.latitude !== undefined && a.longitude !== undefined) {
+          this.mapLat = a.latitude;
+          this.mapLng = a.longitude;
+          this.applyMapCamera();
+        } else {
+          this.geoFailed = true;
+          hilog.warn(0x0000, TAG, 'geocode empty for: ' + addr);
+        }
+      })
+      .catch((err: BusinessError) => {
+        this.geoLoading = false;
+        this.geoFailed = true;
+        hilog.error(0x0000, TAG, `geocode failed ${err.code}: ${err.message}`);
+      });
+  }
+
+  /** 坐标和 controller 都就绪时:移动相机 + 打点。两边任一后到都会回调到这里。 */
+  applyMapCamera(): void {
+    const c: map.MapComponentController | undefined = this.mapController;
+    if (c === undefined || (this.mapLat === 0 && this.mapLng === 0)) return;
+    const target: mapCommon.LatLng = { latitude: this.mapLat, longitude: this.mapLng };
+    try {
+      c.animateCamera(map.newCameraPosition({ target: target, zoom: 16 }), 300);
+      c.clear();
+      c.addMarker({ position: target, title: this.mapAddr });
+    } catch (e) {
+      hilog.error(0x0000, TAG, 'applyMapCamera failed: ' + JSON.stringify(e));
+    }
+  }
+
+  doEntityAction(): void {
+    const e: BlockEntity | null = this.selectedEntity();
+    if (e === null) return;
+    this.closeCard();
+    if (e.kind === 'phone') this.dialPhone(e.value);
+    else if (e.kind === 'url') this.openUrl(e.value);
+    else if (e.kind === 'address') this.openMap(e.value);
+  }
+
+  entityLabel(e: BlockEntity): string {
+    if (e.kind === 'phone') return '📞 拨打 ' + e.value;
+    if (e.kind === 'url') return '🌐 在浏览器打开';
+    if (e.kind === 'address') return '🗺 在地图打开';
+    return '';
   }
 
   centerPageFromScroll(): number {
@@ -316,13 +516,54 @@ export struct DocumentViewerPage {
           MarkdownWeb({ markdown: this.selectedMarkdown() })
             .layoutWeight(1)
             .width('100%')
+
+          // 地址实体:地图预览嵌在卡片**内部**(markdown 文字之下,同一张白卡)
+          if (this.selectedEntity()?.kind === 'address') {
+            Stack({ alignContent: Alignment.Center }) {
+              MapComponent({
+                mapOptions: this.mapOptions,
+                mapCallback: (err: BusinessError, controller: map.MapComponentController) => {
+                  if (!err) { this.mapController = controller; this.applyMapCamera(); }
+                  else { hilog.error(0x0000, TAG, 'map init err: ' + JSON.stringify(err)); }
+                }
+              })
+                .width('100%').height('100%')
+
+              if (this.geoLoading) {
+                Text('正在定位地址…').fontSize(13).fontColor(Theme.TEXT_SECONDARY)
+              } else if (this.geoFailed) {
+                Text('无法定位该地址,可点下方在地图中打开')
+                  .fontSize(13).fontColor(Theme.TEXT_SECONDARY)
+                  .padding(8).backgroundColor('rgba(255,255,255,0.85)').borderRadius(8)
+              }
+            }
+            .width('92%').height(170)
+            .margin({ top: 8, bottom: 12 })
+            .borderRadius(12).clip(true)
+            .backgroundColor(Theme.BG_CARD)
+          }
         }
         .width('86%')
-        .constraintSize({ maxHeight: '52%' })
+        .constraintSize({ maxHeight: '60%' })
         .backgroundColor(Theme.BG_CARD)
         .borderRadius(16)
         .clip(true)
         .shadow({ radius: 18, color: 'rgba(0,0,0,0.18)', offsetX: 0, offsetY: 4 })
+
+        // 命中电话/网址/地址时:在 Add to Chat 上方多出一个次级动作按钮
+        if (this.selectedEntity() !== null) {
+          Button(this.entityLabel(this.selectedEntity()!))
+            .width('86%')
+            .height(46)
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Theme.BRAND)
+            .backgroundColor(Theme.BG_CARD)
+            .borderRadius(16)
+            .margin({ top: 12 })
+            .border({ width: 1.5, color: Theme.BRAND })
+            .onClick(() => this.doEntityAction())
+        }
 
         Button('Add to Chat')
           .width('86%')
@@ -390,7 +631,9 @@ export struct DocumentViewerPage {
                   })
                     .height(this.pageHeight(idx))
                 }
-              }, (uri: string, idx: number) => `${this.docId}_${idx}`)
+              // key 含 pages 长度:解析完成时(空→非空)key 变化,BboxImagePage 重建,
+              // 拿到带 blocks 的新 page prop,后续点击/长按高亮才能正确渲染。
+              }, (uri: string, idx: number) => `${this.docId}_${idx}_${this.pages.length}`)
             }
             .layoutWeight(1)
             .width('100%')

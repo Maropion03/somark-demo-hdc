@@ -18,6 +18,23 @@
       },
       {
         "name": "ohos.permission.INTERNET"
+      },
+      {
+        "name": "ohos.permission.APPROXIMATELY_LOCATION",
+        "reason": "$string:perm_location_reason",
+        "usedScene": { "when": "inuse" }
+      },
+      {
+        "name": "ohos.permission.LOCATION",
+        "reason": "$string:perm_location_reason",
+        "usedScene": { "when": "inuse" }
+      }
+    ],
+    // Map Kit:AppGallery Connect 项目设置 → 常规 → 应用 里的 Client ID
+    "metadata": [
+      {
+        "name": "client_id",
+        "value": "6917606832341879813"
       }
     ],
     "abilities": [

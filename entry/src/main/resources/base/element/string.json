@@ -15,6 +15,10 @@
     {
       "name": "perm_camera_reason",
       "value": "用于拍摄并扫描文档"
+    },
+    {
+      "name": "perm_location_reason",
+      "value": "用于将文档中识别到的地址定位并在地图上预览"
     }
   ]
 }

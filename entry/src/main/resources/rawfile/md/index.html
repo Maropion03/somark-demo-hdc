@@ -18,6 +18,11 @@
   #preview .img-frame img, #preview figure img, #preview img {
     width: 100% !important; height: auto !important; max-width: 100% !important; }
   table { border-color: #E5E5EA; }
+  /* iframe 直接渲染目标页面作为"跳转后预览"(纯窗口,无装饰) */
+  .entity-preview {
+    width: 100%; height: 260px; border: 1px solid #E5E5EA;
+    border-radius: 10px; margin: 12px 0 4px; background: #FFFFFF;
+  }
   ::selection { background: rgba(255,140,0,0.3); }
 </style>
 <script src="somarkdown.umd.min.js"></script>
@@ -49,6 +54,7 @@
     try {
       if (!smRenderer && typeof SoMarkDown !== 'undefined') {
         smRenderer = new SoMarkDown({ html: true, typographer: true,
+          imgDescEnabled: true,
           lineNumbers: { enable: true, nested: true },
           katex: { throwOnError: false, errorColor: '#9AA0A6', strict: false, trust: true },
           smiles: { disableColors: false } });
