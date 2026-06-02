@@ -1,7 +1,7 @@
 {
   "layered-image":
   {
-    "background" : "$media:somark_mark",
-    "foreground" : "$media:somark_mark"
+    "background" : "$media:background",
+    "foreground" : "$media:foreground"
   }
 }
