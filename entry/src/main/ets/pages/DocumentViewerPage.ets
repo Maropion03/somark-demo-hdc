@@ -14,6 +14,7 @@ import { image } from '@kit.ImageKit';
 import { geoLocationManager } from '@kit.LocationKit';
 import { mapCommon, map, MapComponent, petalMaps } from '@kit.MapKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { webview } from '@kit.ArkWeb';
 import { Theme } from '../common/Theme';
 
 const TAG: string = 'SoScan';
@@ -64,6 +65,7 @@ export struct DocumentViewerPage {
     position: { target: { latitude: 39.9042, longitude: 116.4074 }, zoom: 10 }
   };
   private mapController?: map.MapComponentController;
+  private urlController: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear(): void {
     try {
@@ -214,13 +216,9 @@ export struct DocumentViewerPage {
       }
     }
 
-    // 网址:解析内容**之下**直接 iframe 该 URL(纯窗口,无标签)。
-    // 地址:不再走 iframe(高德 uri.amap.com 嵌入会弹验证码),改用操作卡内的原生 MapComponent 预览。
-    const entity: BlockEntity | null = this.selectedEntity();
-    if (entity !== null && entity.kind === 'url') {
-      parts.push(`<iframe class="entity-preview" src="${entity.value}" sandbox="allow-scripts allow-same-origin"></iframe>`);
-    }
-
+    // 网址/地址预览都不再走 iframe:
+    //  - iframe 会被站点的 X-Frame-Options / CSP frame-ancestors 拦截而白屏(政府站常见);
+    //  - 改在操作卡内用**原生 Web(顶层加载,非 frame)** 预览网址、用 MapComponent 预览地址。
     return parts.join('\n\n');
   }
 
@@ -289,6 +287,12 @@ export struct DocumentViewerPage {
     const blocks: SmBlock[] = this.pageInfo(this.anchorPage).blocks;
     if (this.anchorIdx < 0 || this.anchorIdx >= blocks.length) return null;
     return classifyBlock(blocks[this.anchorIdx].content);
+  }
+
+  /** 命中网址或地址 → 卡内有大块预览(网址 Web / 地址地图),此时卡片定高为最大。 */
+  hasEntityPreview(): boolean {
+    const e: BlockEntity | null = this.selectedEntity();
+    return e !== null && (e.kind === 'url' || e.kind === 'address');
   }
 
   // ===== 三种实体动作 =====
@@ -503,48 +507,73 @@ export struct DocumentViewerPage {
 
       Column() {
         Column() {
-          Row() {
-            Text('选中内容 · 长按拖动可跨页多选')
-              .fontSize(12).fontColor(Theme.TEXT_SECONDARY).layoutWeight(1)
-            Text('取消')
-              .fontSize(13).fontColor(Theme.BRAND)
-              .onClick(() => this.closeCard())
-          }
-          .width('100%')
-          .padding({ left: 14, right: 14, top: 12, bottom: 6 })
+          if (this.hasEntityPreview()) {
+            // 有预览(网址/地址):卡片定高=最大,文字区受限,预览尽量占满剩余空间
+            Column() {
+              Scroll() {
+                MarkdownWeb({ markdown: this.selectedMarkdown(), autoHeight: true })
+                  .width('100%')
+              }
+              .width('100%')
+              .constraintSize({ maxHeight: '34%' })
+              .scrollBar(BarState.Auto)
+              .edgeEffect(EdgeEffect.Spring)
 
-          MarkdownWeb({ markdown: this.selectedMarkdown() })
-            .layoutWeight(1)
-            .width('100%')
+              if (this.selectedEntity()?.kind === 'address') {
+                // 地址:原生地图预览,占满文字以下的全部空间
+                Stack({ alignContent: Alignment.Center }) {
+                  MapComponent({
+                    mapOptions: this.mapOptions,
+                    mapCallback: (err: BusinessError, controller: map.MapComponentController) => {
+                      if (!err) {
+                        this.mapController = controller;
+                        try { controller.setZoomControlsEnabled(false); } catch (e) { }
+                        this.applyMapCamera();
+                      } else {
+                        hilog.error(0x0000, TAG, 'map init err: ' + JSON.stringify(err));
+                      }
+                    }
+                  })
+                    .width('100%').height('100%')
 
-          // 地址实体:地图预览嵌在卡片**内部**(markdown 文字之下,同一张白卡)
-          if (this.selectedEntity()?.kind === 'address') {
-            Stack({ alignContent: Alignment.Center }) {
-              MapComponent({
-                mapOptions: this.mapOptions,
-                mapCallback: (err: BusinessError, controller: map.MapComponentController) => {
-                  if (!err) { this.mapController = controller; this.applyMapCamera(); }
-                  else { hilog.error(0x0000, TAG, 'map init err: ' + JSON.stringify(err)); }
+                  if (this.geoLoading) {
+                    Text('正在定位地址…').fontSize(13).fontColor(Theme.TEXT_SECONDARY)
+                  } else if (this.geoFailed) {
+                    Text('无法定位该地址,可点下方在地图中打开')
+                      .fontSize(13).fontColor(Theme.TEXT_SECONDARY)
+                      .padding(8).backgroundColor('rgba(255,255,255,0.85)').borderRadius(8)
+                  }
                 }
-              })
-                .width('100%').height('100%')
-
-              if (this.geoLoading) {
-                Text('正在定位地址…').fontSize(13).fontColor(Theme.TEXT_SECONDARY)
-              } else if (this.geoFailed) {
-                Text('无法定位该地址,可点下方在地图中打开')
-                  .fontSize(13).fontColor(Theme.TEXT_SECONDARY)
-                  .padding(8).backgroundColor('rgba(255,255,255,0.85)').borderRadius(8)
+                .width('92%').layoutWeight(1)
+                .margin({ top: 0, bottom: 14 })
+                .borderRadius(12).clip(true)
+                .backgroundColor(Theme.BG_CARD)
+              } else {
+                // 网址:原生 Web 顶层加载(非 iframe,规避 X-Frame-Options 白屏),占满剩余空间
+                Web({ src: this.selectedEntity()!.value, controller: this.urlController })
+                  .javaScriptAccess(true)
+                  .domStorageAccess(true)
+                  .darkMode(WebDarkMode.Off)
+                  .width('92%').layoutWeight(1)
+                  .margin({ top: 0, bottom: 14 })
+                  .borderRadius(12).clip(true)
+                  .backgroundColor('#FFFFFF')
               }
             }
-            .width('92%').height(170)
-            .margin({ top: 8, bottom: 12 })
-            .borderRadius(12).clip(true)
-            .backgroundColor(Theme.BG_CARD)
+            .width('100%').height('62%')
+          } else {
+            // 纯文本:整卡按内容自适应高度,超过 maxHeight 时卡内可上下滑动查看
+            Scroll() {
+              MarkdownWeb({ markdown: this.selectedMarkdown(), autoHeight: true })
+                .width('100%')
+            }
+            .width('100%')
+            .constraintSize({ maxHeight: '60%' })
+            .scrollBar(BarState.Auto)
+            .edgeEffect(EdgeEffect.Spring)
           }
         }
         .width('86%')
-        .constraintSize({ maxHeight: '60%' })
         .backgroundColor(Theme.BG_CARD)
         .borderRadius(16)
         .clip(true)

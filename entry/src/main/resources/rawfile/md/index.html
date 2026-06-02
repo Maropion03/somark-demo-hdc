@@ -9,7 +9,10 @@
 <style>
   html, body { margin: 0; padding: 0; background: #FFFFFF; color: #1A1A1A;
     font-size: 15px; -webkit-text-size-adjust: 100%; }
-  #preview { padding: 12px 14px 40px; }
+  #preview { padding: 14px; }
+  /* 折叠首尾元素的外边距:标题/段落自带的 margin 会叠加在 padding 上,导致卡片内容上下空隙过大 */
+  #preview > :first-child { margin-top: 0 !important; }
+  #preview > :last-child { margin-bottom: 0 !important; }
   .somarkdown-container a { color: #FF8C00; }
   .somarkdown-container h1, .somarkdown-container h2, .somarkdown-container h3 { color: #1A1A1A; }
   img { max-width: 100%; height: auto; border-radius: 6px; }
