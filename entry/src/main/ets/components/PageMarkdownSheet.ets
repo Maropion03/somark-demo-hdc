@@ -1,4 +1,5 @@
 import { MarkdownWeb } from './MarkdownWeb';
+import { ParsingIndicator } from './ParsingIndicator';
 import { Theme } from '../common/Theme';
 
 interface SmBlock {
@@ -100,13 +101,18 @@ export struct PageMarkdownSheet {
           .border({ width: { bottom: 0.5 }, color: Theme.DIVIDER })
 
           if (this.parsing) {
-            Column() {
-              LoadingProgress().width(36).height(36).color(Theme.BRAND)
-              Text('正在解析…').fontSize(13).fontColor(Theme.TEXT_SECONDARY).margin({ top: 10 })
-            }
-            .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+            ParsingIndicator({
+              message: '正在解析文档…',
+              hint: '完成后将自动展示 Markdown',
+              fill: true
+            })
+              .layoutWeight(1)
+              .width('100%')
           } else {
-            MarkdownWeb({ markdown: this.sheetMarkdown() })
+            MarkdownWeb({
+              markdown: this.sheetMarkdown(),
+              showLoading: true
+            })
               .layoutWeight(1)
               .width('100%')
           }

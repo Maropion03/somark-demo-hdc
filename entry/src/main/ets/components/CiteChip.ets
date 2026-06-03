@@ -5,21 +5,28 @@ import { Citation, DocRef, BlockRef } from '../model/Chat';
 export struct CiteChip {
   cite: Citation = { kind: 'doc', docId: '', docName: '' } as DocRef;
   removable: boolean = false;
-  bg: string = 'rgba(255,140,0,0.14)';
-  fg: string = '#C76A00';
+  bg: string = 'rgba(10,89,247,0.14)';
+  fg: string = '#0A59F7';
   onRemove: (cite: Citation) => void = () => {};
 
   label(): string {
     if (this.cite.kind === 'doc') {
-      return `📄 ${(this.cite as DocRef).docName}`;
+      return `${(this.cite as DocRef).docName}`;
     }
     const b = this.cite as BlockRef;
     const preview: string = b.previewText.length > 18 ? b.previewText.substring(0, 18) + '…' : b.previewText;
-    return `❝${preview}❞`;
+    return `“${preview}”`;
   }
 
   build() {
     Row() {
+      if (this.cite.kind === 'doc') {
+        Image($r('app.media.ic_file_hint'))
+          .width(14)
+          .height(14)
+          .objectFit(ImageFit.Contain)
+          .margin({ right: 6 })
+      }
       Text(this.label())
         .fontSize(12)
         .fontColor(this.fg)
@@ -28,10 +35,10 @@ export struct CiteChip {
         .layoutWeight(1)
       if (this.removable) {
         Button() {
-          Text('×')
-            .fontSize(15)
-            .fontColor(this.fg)
-            .fontWeight(FontWeight.Bold)
+          Image($r('app.media.ic_close_dark'))
+            .width(14)
+            .height(14)
+            .objectFit(ImageFit.Contain)
         }
         .type(ButtonType.Circle)
         .width(24)

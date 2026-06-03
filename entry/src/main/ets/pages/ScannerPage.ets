@@ -3,8 +3,8 @@ import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { DocumentStore } from '../services/DocumentStore';
 import { newDocument, DocumentRecord } from '../model/Document';
-import { SoMarkApi, ParseResult } from '../services/SoMarkApi';
-import { PdfBuilder } from '../services/PdfBuilder';
+import { DocumentParseService } from '../services/DocumentParseService';
+import { Theme } from '../common/Theme';
 
 const TAG: string = 'SoScan';
 
@@ -23,8 +23,10 @@ export struct ScannerPage {
   @State permChecked: boolean = false;
   @State permGranted: boolean = false;
   @State scannerVisible: boolean = true;
+  @State pageEnter: boolean = false;
 
   aboutToAppear(): void {
+    this.pageEnter = false;
     this.requestCameraPermission().then((granted: boolean) => {
       this.permGranted = granted;
       this.permChecked = true;
@@ -58,53 +60,11 @@ export struct ScannerPage {
       doc.originalImageUris = sandboxPaths;
       DocumentStore.addDocument(doc);
       hilog.info(0x0000, TAG, `saved doc ${doc.id}, ${sandboxPaths.length} images, start parsing`);
-      this.parseDoc(doc);
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      DocumentParseService.parseDocument(doc.id, context.cacheDir);
     } catch (e) {
       hilog.error(0x0000, TAG, 'saveScan failed: ' + JSON.stringify(e));
     }
-  }
-
-  /**
-   * 异步把文档发给 SoMark API 解析,完成后更新状态与内容。
-   * 单页:沿用已验收的 JPG 直发。多页:全部图片拼成一个 PDF 整篇发(API 有跨页逻辑)。
-   */
-  parseDoc(doc: DocumentRecord): void {
-    if (doc.originalImageUris.length === 0) {
-      return;
-    }
-    let filePath: string = '';
-    let contentType: string = '';
-    let remoteFileName: string = '';
-    try {
-      if (doc.originalImageUris.length === 1) {
-        filePath = doc.originalImageUris[0];
-        contentType = 'image/jpeg';
-        remoteFileName = 'scan.jpg';
-      } else {
-        const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
-        filePath = `${context.cacheDir}/parse_${doc.id}.pdf`;
-        PdfBuilder.build(doc.originalImageUris, filePath);
-        contentType = 'application/pdf';
-        remoteFileName = 'scan.pdf';
-      }
-    } catch (e) {
-      hilog.error(0x0000, TAG, 'parseDoc prepare failed: ' + JSON.stringify(e));
-      doc.status = 'failed';
-      DocumentStore.updateDocument(doc);
-      return;
-    }
-    SoMarkApi.parse(filePath, contentType, remoteFileName)
-      .then((result: ParseResult) => {
-        doc.parsedMarkdown = result.markdown;
-        doc.parsedJson = result.json;
-        doc.status = 'done';
-        DocumentStore.updateDocument(doc);
-      })
-      .catch((e: Error) => {
-        hilog.error(0x0000, TAG, 'parseDoc failed: ' + e.message);
-        doc.status = 'failed';
-        DocumentStore.updateDocument(doc);
-      });
   }
 
   build() {
@@ -113,11 +73,12 @@ export struct ScannerPage {
         Column() {
           Text('正在准备相机…')
             .fontSize(15)
-            .fontColor('rgba(255,255,255,0.7)')
+            .fontColor(Theme.TEXT_SECONDARY)
         }
         .width('100%')
         .height('100%')
         .justifyContent(FlexAlign.Center)
+        .backgroundColor(Theme.BG_PAGE)
       } else if (this.permGranted) {
         if (this.scannerVisible) {
           DocumentScanner({
@@ -151,21 +112,23 @@ export struct ScannerPage {
           Column()
             .width('100%')
             .height('100%')
-            .backgroundColor('#000000')
+            .backgroundColor(Theme.BG_PAGE)
         }
       } else {
         Column() {
           Text('需要相机权限才能扫描文档')
             .fontSize(16)
-            .fontColor('#FFFFFF')
+            .fontColor(Theme.TEXT_PRIMARY)
           Text('请在系统设置中允许扫描王中王使用相机')
             .fontSize(13)
-            .fontColor('rgba(255,255,255,0.5)')
+            .fontColor(Theme.TEXT_SECONDARY)
             .margin({ top: 8 })
           Button('返回')
             .margin({ top: 24 })
-            .backgroundColor('#FF8C00')
-            .fontColor('#FFFFFF')
+            .backgroundColor(Theme.BRAND)
+            .fontColor(Theme.TEXT_ON_BRAND)
+            .borderRadius(Theme.RADIUS_LG)
+            .shadow(Theme.SHADOW_SOFT)
             .onClick(() => {
               this.pathStack.pop();
             })
@@ -173,15 +136,20 @@ export struct ScannerPage {
         .width('100%')
         .height('100%')
         .justifyContent(FlexAlign.Center)
+        .backgroundColor(Theme.BG_PAGE)
       }
     }
     .hideTitleBar(true)
-    .backgroundColor('#000000')
+    .backgroundColor(Theme.BG_PAGE)
     .onShown(() => {
+      this.pageEnter = true;
       // 从 ChatPage 返回到栈底 Scanner 时,重新挂载 DocumentScanner 控件
       if (this.permGranted && !this.scannerVisible) {
         this.scannerVisible = true;
       }
     })
+    .opacity(this.pageEnter ? 1 : 0.92)
+    .translate({ x: this.pageEnter ? 0 : 12, y: 0 })
+    .animation({ duration: 200, curve: Curve.EaseOut })
   }
 }

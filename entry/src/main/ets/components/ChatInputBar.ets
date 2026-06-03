@@ -56,25 +56,34 @@ export struct ChatInputBar {
         }
         .layoutWeight(1)
         .backgroundColor(Theme.BG_SUBTLE)
-        .borderRadius(16)
+        .borderRadius(Theme.RADIUS_LG)
+        .border({ width: 1, color: Theme.BORDER })
 
         if (this.sending) {
           Button() {
-            Text('⏹').fontSize(18).fontColor(Theme.TEXT_ON_BRAND)
+            Image($r('app.media.ic_stop_white'))
+              .width(18)
+              .height(18)
+              .objectFit(ImageFit.Contain)
           }
           .type(ButtonType.Circle)
           .width(40).height(40)
           .backgroundColor(Theme.DANGER)
           .margin({ left: 8 })
+          .shadow(Theme.SHADOW_SOFT)
           .onClick(() => this.onStop())
         } else {
           Button() {
-            Text('↑').fontSize(20).fontColor(Theme.TEXT_ON_BRAND).fontWeight(FontWeight.Bold)
+            Image($r('app.media.ic_send_white'))
+              .width(18)
+              .height(18)
+              .objectFit(ImageFit.Contain)
           }
           .type(ButtonType.Circle)
           .width(40).height(40)
-          .backgroundColor(this.text.trim().length > 0 ? Theme.BRAND : '#D0D0D5')
+          .backgroundColor(this.text.trim().length > 0 ? Theme.BRAND : Theme.BORDER)
           .margin({ left: 8 })
+          .shadow(Theme.SHADOW_SOFT)
           .enabled(this.text.trim().length > 0)
           .onClick(() => this.send())
         }
@@ -84,6 +93,7 @@ export struct ChatInputBar {
       .alignItems(VerticalAlign.Bottom)
     }
     .width('100%')
+    // InputBar 回归实体分区，更像 App
     .backgroundColor(Theme.BG_CARD)
     .border({
       width: this.dropHover ? { top: 2 } : { top: 0.5 },

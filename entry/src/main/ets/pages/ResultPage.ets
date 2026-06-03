@@ -1,6 +1,8 @@
 import { DocumentRecord } from '../model/Document';
 import { StructureRenderer } from '../components/StructureRenderer';
 import { fileUri } from '@kit.CoreFileKit';
+import { Theme } from '../common/Theme';
+import { ParsingIndicator } from '../components/ParsingIndicator';
 
 /**
  * 结果页 —— 「原图 ↔ 解析结构」对比展示。
@@ -38,7 +40,7 @@ export struct ResultPage {
       .fontSize(14)
       .fontColor(this.tab === idx ? '#000000' : 'rgba(255,255,255,0.8)')
       .fontWeight(this.tab === idx ? FontWeight.Medium : FontWeight.Normal)
-      .backgroundColor(this.tab === idx ? '#FF8C00' : 'transparent')
+      .backgroundColor(this.tab === idx ? Theme.BRAND : 'transparent')
       .borderRadius(6)
       .onClick(() => {
         this.tab = idx;
@@ -49,12 +51,19 @@ export struct ResultPage {
     NavDestination() {
       Column() {
         Row() {
-          Text('‹ 返回')
-            .fontSize(16)
-            .fontColor('#FF8C00')
-            .onClick(() => {
-              this.pathStack.pop();
-            })
+          Row() {
+            Image($r('app.media.ic_back_brand'))
+              .width(22)
+              .height(22)
+              .objectFit(ImageFit.Contain)
+          }
+          .width(40)
+          .height(40)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .onClick(() => {
+            this.pathStack.pop();
+          })
           Text(this.currentDoc()?.name ?? '文档')
             .fontSize(18)
             .fontColor('#FFFFFF')
@@ -69,19 +78,9 @@ export struct ResultPage {
         if (this.currentDoc() === undefined) {
           this.hint('文档不存在')
         } else if (this.currentDoc()!.status === 'parsing') {
-          Column() {
-            LoadingProgress()
-              .width(48)
-              .height(48)
-              .color('#FF8C00')
-            Text('解析中…')
-              .fontSize(15)
-              .fontColor('rgba(255,255,255,0.7)')
-              .margin({ top: 12 })
-          }
-          .layoutWeight(1)
-          .width('100%')
-          .justifyContent(FlexAlign.Center)
+          ParsingIndicator({ message: '文档解析中…', hint: '请稍候' })
+            .layoutWeight(1)
+            .width('100%')
         } else if (this.currentDoc()!.status === 'failed') {
           this.hint('解析失败')
         } else {

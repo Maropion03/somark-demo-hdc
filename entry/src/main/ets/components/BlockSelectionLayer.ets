@@ -1,4 +1,5 @@
 import { BlockRef } from '../model/Chat';
+import { Theme } from '../common/Theme';
 
 export interface SelectableBlock {
   index: number;
@@ -140,7 +141,7 @@ export struct BlockSelectionLayer {
     }
     .width('100%')
     .padding(8)
-    .backgroundColor(this.selectedIdx === b.index ? 'rgba(255,140,0,0.2)' : 'transparent')
+    .backgroundColor(this.selectedIdx === b.index ? 'rgba(10,89,247,0.2)' : 'transparent')
     .borderRadius(6)
     .gesture(
       LongPressGesture({ duration: 350 })
@@ -184,7 +185,7 @@ export struct BlockSelectionLayer {
           Button('Add to Chat')
             .layoutWeight(1)
             .height(38)
-            .backgroundColor('#FF8C00')
+            .backgroundColor(Theme.BRAND)
             .fontColor('#FFFFFF')
             .fontSize(13)
             .margin({ left: 8 })

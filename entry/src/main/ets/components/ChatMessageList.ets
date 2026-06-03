@@ -26,35 +26,47 @@ export struct ChatMessageList {
   }
 
   @Builder
-  citeRow(citations: Citation[]) {
+  citeRow(citations: Citation[], inUserBubble: boolean) {
     if (citations.length > 0) {
-      Flex({ wrap: FlexWrap.Wrap }) {
+      Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Start }) {
         ForEach(citations, (c: Citation, idx: number) => {
           Row() {
-            CiteChip({ cite: c, removable: false })
+            CiteChip({
+              cite: c,
+              removable: false,
+              bg: inUserBubble ? 'rgba(255,255,255,0.22)' : Theme.CHIP_BG,
+              fg: inUserBubble ? Theme.BUBBLE_USER_TEXT : Theme.CHIP_TEXT
+            })
           }
           .margin({ right: 6, bottom: 6 })
         }, (c: Citation, idx: number) => `cite_${idx}`)
       }
-      .width('100%')
-      .margin({ bottom: 6 })
     }
   }
 
   @Builder
   userBubble(m: ChatMessage) {
     Column() {
-      this.citeRow(m.citations)
-      Text(m.content)
-        .fontSize(15)
-        .fontColor(Theme.BUBBLE_USER_TEXT)
-        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-        .backgroundColor(Theme.BUBBLE_USER)
-        .borderRadius(14)
-        .gesture(LongPressGesture({ duration: 350 }).onAction(() => this.onLongPressMsg(m)))
+      Column() {
+        this.citeRow(m.citations, true)
+        if (m.content.length > 0) {
+          Text(m.content)
+            .fontSize(15)
+            .fontColor(Theme.BUBBLE_USER_TEXT)
+            .lineHeight(22)
+            .margin({ top: m.citations.length > 0 ? 4 : 0 })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+      .backgroundColor(Theme.BUBBLE_USER)
+      .borderRadius(Theme.RADIUS_MD)
+      .shadow(Theme.SHADOW_SOFT)
+      .gesture(LongPressGesture({ duration: 350 }).onAction(() => this.onLongPressMsg(m)))
     }
     .alignItems(HorizontalAlign.End)
     .constraintSize({ maxWidth: '85%' })
+    .alignSelf(ItemAlign.End)
   }
 
   @Builder
@@ -67,8 +79,10 @@ export struct ChatMessageList {
         }
         .padding(12)
         .backgroundColor(Theme.BUBBLE_ASSIST)
-        .borderRadius(14)
+        .borderRadius(Theme.RADIUS_MD)
         .border({ width: 0.5, color: Theme.BORDER })
+        .shadow(Theme.SHADOW_SOFT)
+        .alignSelf(ItemAlign.Start)
       } else if (m.pending) {
         // 流式中:纯文本逐字更新,不走 Web(避免每 token 重渲闪烁)
         Text(m.content)
@@ -77,30 +91,42 @@ export struct ChatMessageList {
           .lineHeight(22)
           .padding({ left: 14, right: 14, top: 10, bottom: 10 })
           .backgroundColor(Theme.BUBBLE_ASSIST)
-          .borderRadius(14)
+          .borderRadius(Theme.RADIUS_MD)
           .border({ width: 0.5, color: Theme.BORDER })
+          .shadow(Theme.SHADOW_SOFT)
           .constraintSize({ maxWidth: '84%' })
+          .alignSelf(ItemAlign.Start)
       } else {
         // 生成完成:自研 Markdown 渲染(原生自然撑高,不闪不卡)
         Column() {
           MarkdownView({ text: m.content, baseColor: Theme.BUBBLE_ASSIST_TEXT })
         }
+        .alignItems(HorizontalAlign.Start)
         .constraintSize({ maxWidth: '84%' })
+        .alignSelf(ItemAlign.Start)
         .padding({ left: 14, right: 14, top: 10, bottom: 10 })
         .backgroundColor(Theme.BUBBLE_ASSIST)
-        .borderRadius(14)
+        .borderRadius(Theme.RADIUS_MD)
         .border({ width: 0.5, color: Theme.BORDER })
+        .shadow(Theme.SHADOW_SOFT)
         .gesture(LongPressGesture({ duration: 350 }).onAction(() => this.onLongPressMsg(m)))
 
         if (this.isLastFailed(m)) {
           Row() {
-            Text('↻ 重试')
-              .fontSize(12)
-              .fontColor(Theme.BRAND)
-              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-              .backgroundColor(Theme.BRAND_SOFT)
-              .borderRadius(10)
-              .onClick(() => this.onRetry(m))
+            Row() {
+              Image($r('app.media.ic_retry_brand'))
+                .width(14)
+                .height(14)
+                .objectFit(ImageFit.Contain)
+                .margin({ right: 6 })
+              Text('重试')
+                .fontSize(12)
+                .fontColor(Theme.BRAND)
+            }
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .backgroundColor(Theme.BRAND_SOFT)
+            .borderRadius(999)
+            .onClick(() => this.onRetry(m))
           }
           .margin({ top: 4 })
         }

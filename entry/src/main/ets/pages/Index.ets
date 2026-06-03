@@ -2,6 +2,7 @@ import { ResultPage } from './ResultPage';
 import { ScannerPage } from './ScannerPage';
 import { ChatPage } from './ChatPage';
 import { DocumentViewerPage } from './DocumentViewerPage';
+import { Theme } from '../common/Theme';
 
 interface ChatPageParam {
   sessionId?: string;
@@ -40,13 +41,13 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('#000000')
+        .backgroundColor(Theme.BG_PAGE)
     }
     .navDestination(this.pageMap)
     .hideTitleBar(true)
     .mode(NavigationMode.Stack)
     .width('100%')
     .height('100%')
-    .backgroundColor('#000000')
+    .backgroundColor(Theme.BG_PAGE)
   }
 }

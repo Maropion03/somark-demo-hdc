@@ -1,7 +1,9 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { promptAction, display } from '@kit.ArkUI';
+import { http } from '@kit.NetworkKit';
 import { fileUri } from '@kit.CoreFileKit';
+import { common } from '@kit.AbilityKit';
 import { ChatMessageList } from '../components/ChatMessageList';
 import { ChatInputBar } from '../components/ChatInputBar';
 import { DocDrawer } from '../components/DocDrawer';
@@ -14,6 +16,7 @@ import { DocumentRecord } from '../model/Document';
 import { ChatSessionStore } from '../services/ChatSessionStore';
 import { DocumentStore } from '../services/DocumentStore';
 import { DmxApiClient, DmxMessage, StreamHandle } from '../services/DmxApiClient';
+import { DocumentParseService } from '../services/DocumentParseService';
 import { Theme } from '../common/Theme';
 
 const TAG: string = 'SoScan';
@@ -38,18 +41,45 @@ export struct ChatPage {
   @State pendingCitations: Citation[] = [];
   @State sending: boolean = false;
   @State drawerExpanded: boolean = false;
-  @State historyVisible: boolean = false;
+  @State historyVisible: boolean = false;   // 控制挂载
+  @State historyOpen: boolean = false;      // 控制开/关动画态
+  @State pageEnter: boolean = false;
+  @State sessionSwitching: boolean = false;
   @State dropHover: boolean = false;
   // 自绘拖拽
   @State dragActive: boolean = false;
   @State dragX: number = 0;
   @State dragY: number = 0;
   @State dragDoc: DocumentRecord | null = null;
+  // 磁吸反馈：进入可投放区时更明显
+  @State dropReady: boolean = false;
   // 实测投放区边界(全局 vp):抽屉顶 / 输入栏顶
   private drawerTopY: number = 99999;
   private inputTopY: number = 99999;
   private streamHandle: StreamHandle | null = null;
   private scrollKey: number = 0;
+  private parsingPollTimer: number = -1;
+
+  debugLog(hypothesisId: string, location: string, message: string, data: string): void {
+    const req = http.createHttp();
+    const payload: string = JSON.stringify({
+      sessionId: '546962',
+      runId: 'investigate-middle-state',
+      hypothesisId: hypothesisId,
+      location: location,
+      message: message,
+      data: data,
+      timestamp: Date.now()
+    });
+    req.request('http://127.0.0.1:7553/ingest/ab900cb5-5ffc-44a9-b4ee-9d5b39d582b9', {
+      method: http.RequestMethod.POST,
+      header: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '546962'
+      },
+      extraData: payload
+    }).catch(() => {}).finally(() => req.destroy());
+  }
 
   screenHeightVp(): number {
     try {
@@ -64,11 +94,17 @@ export struct ChatPage {
     this.dragX = x;
     this.dragY = y;
     this.dragActive = true;
+    this.dropReady = (y < this.drawerTopY || y >= this.inputTopY);
+    // #region agent log
+    this.debugLog('H1', 'ChatPage.ets:onPickBegin', 'drag state begin',
+      `docId=${doc.id},x=${x},y=${y},dragActive=${this.dragActive},drawerTopY=${this.drawerTopY},inputTopY=${this.inputTopY}`);
+    // #endregion
   }
 
   onPickMove(x: number, y: number): void {
     this.dragX = x;
     this.dragY = y;
+    this.dropReady = (y < this.drawerTopY || y >= this.inputTopY);
   }
 
   /** 落在聊天区(抽屉顶边以上)或输入框(输入栏顶边以下)才加入引用;落在抽屉内(含搜索栏)不加。 */
@@ -76,6 +112,11 @@ export struct ChatPage {
     const doc = this.dragDoc;
     this.dragActive = false;
     this.dragDoc = null;
+    this.dropReady = false;
+    // #region agent log
+    this.debugLog('H3', 'ChatPage.ets:onPickRelease', 'drag release evaluated',
+      `docId=${doc !== null ? doc.id : ''},x=${x},y=${y},dragActive=${this.dragActive},drawerTopY=${this.drawerTopY},inputTopY=${this.inputTopY},shouldPick=${doc !== null && (y < this.drawerTopY || y >= this.inputTopY)}`);
+    // #endregion
     if (doc === null) return;
     if (y < this.drawerTopY || y >= this.inputTopY) {
       this.onPickDoc(doc);
@@ -96,6 +137,37 @@ export struct ChatPage {
     if (handoff !== undefined && handoff.length > 0) {
       this.pendingCitations = [...this.pendingCitations, ...handoff];
       AppStorage.setOrCreate<Citation[]>('pendingCitations', []);
+    }
+    this.pageEnter = false;
+    this.startParsingPoll();
+  }
+
+  aboutToDisappear(): void {
+    this.stopParsingPoll();
+  }
+
+  hasParsingDocs(): boolean {
+    return this.documents.some((d: DocumentRecord) => d.status === 'parsing' && d.originalImageUris.length > 0);
+  }
+
+  startParsingPoll(): void {
+    this.stopParsingPoll();
+    const tick = () => {
+      if (this.hasParsingDocs()) {
+        try {
+          const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+          DocumentParseService.reconcileParsingDocuments(context.cacheDir);
+        } catch (e) {}
+      }
+      this.parsingPollTimer = setTimeout(tick, 2500);
+    };
+    this.parsingPollTimer = setTimeout(tick, 600);
+  }
+
+  stopParsingPoll(): void {
+    if (this.parsingPollTimer >= 0) {
+      clearTimeout(this.parsingPollTimer);
+      this.parsingPollTimer = -1;
     }
   }
 
@@ -202,6 +274,10 @@ export struct ChatPage {
   }
 
   onOpenDoc(doc: DocumentRecord): void {
+    // #region agent log
+    this.debugLog('H4', 'ChatPage.ets:onOpenDoc', 'open document from drawer',
+      `docId=${doc.id},drawerExpanded=${this.drawerExpanded},dragActive=${this.dragActive}`);
+    // #endregion
     this.drawerExpanded = false;
     this.pathStack.pushPath({ name: 'DocumentViewerPage', param: doc.id });
   }
@@ -255,9 +331,12 @@ export struct ChatPage {
   }
 
   switchSession(s: ChatSession): void {
-    this.historyVisible = false;
+    this.debugLog('H9', 'ChatPage.ets:switchSession', 'switchSession invoked', `sessionId=${s.id},title=${s.title},prevSessionId=${this.session.id}`);
+    this.sessionSwitching = true;
+    this.closeHistorySheet();
     this.session = s;
     this.pendingCitations = [];
+    setTimeout(() => { this.sessionSwitching = false; }, 140);
   }
 
   deleteSession(s: ChatSession): void {
@@ -266,31 +345,54 @@ export struct ChatPage {
     promptAction.showToast({ message: '已删除' });
     if (wasCurrent) {
       // 删的是当前会话 → 退出到一个干净的新会话
-      this.historyVisible = false;
+      this.closeHistorySheet();
       this.session = newChatSession();
       this.pendingCitations = [];
     }
   }
 
   newSession(): void {
-    this.historyVisible = false;
+    this.closeHistorySheet();
     this.session = newChatSession();
     this.pendingCitations = [];
+  }
+
+  openHistorySheet(): void {
+    this.historyVisible = true;
+    this.historyOpen = false;
+    // 给组件一帧时间完成挂载，避免首帧直接跳到终态
+    setTimeout(() => { this.historyOpen = true; }, 16);
+  }
+
+  closeHistorySheet(): void {
+    this.historyOpen = false;
+    // 与抽屉离场动画时长对齐，避免提前卸载造成“硬切”
+    setTimeout(() => { this.historyVisible = false; }, 260);
   }
 
   build() {
     NavDestination() {
       Stack() {
+        // 消费级轻氛围底色（弱渐变，避免网页纯白大留白）
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor(Theme.BG_PAGE)
+
         Column() {
           // TopBar
           Row() {
-            Text('‹')
-              .fontSize(22)
-              .fontColor(Theme.BRAND)
-              .width(40)
-              .height(40)
-              .textAlign(TextAlign.Center)
-              .onClick(() => this.pathStack.pop())
+            Row() {
+              Image($r('app.media.ic_back_brand'))
+                .width(22)
+                .height(22)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(40)
+            .height(40)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => this.pathStack.pop())
             Text(this.session.title)
               .fontSize(16)
               .fontColor(Theme.TEXT_PRIMARY)
@@ -298,16 +400,21 @@ export struct ChatPage {
               .textAlign(TextAlign.Center)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text('☰')
-              .fontSize(20)
-              .fontColor(Theme.TEXT_PRIMARY)
-              .width(40)
-              .height(40)
-              .textAlign(TextAlign.Center)
-              .onClick(() => { this.historyVisible = true; })
+            Row() {
+              Image($r('app.media.ic_history_dark'))
+                .width(22)
+                .height(22)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(40)
+            .height(40)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => this.openHistorySheet())
           }
           .width('100%')
-          .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+          .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+          // TopBar 回归实体分区，更像 App 框架
           .backgroundColor(Theme.BG_CARD)
           .border({ width: { bottom: 0.5 }, color: Theme.DIVIDER })
 
@@ -319,6 +426,10 @@ export struct ChatPage {
               onLongPressMsg: (m: ChatMessage) => this.onLongPressMsg(m),
               onRetry: (m: ChatMessage) => this.onRetryMsg(m)
             })
+            .opacity(this.sessionSwitching ? 0.88 : 1)
+            .translate({ x: this.sessionSwitching ? 6 : 0, y: 0 })
+            .animation({ duration: 150, curve: Curve.EaseOut })
+            // 空态引导模块按你要求先移除
             // Mask: 抽屉展开时,点消息区收回(B5)
             if (this.drawerExpanded) {
               Column()
@@ -366,6 +477,9 @@ export struct ChatPage {
         }
         .width('100%')
         .height('100%')
+        .opacity(this.pageEnter ? 1 : 0.92)
+        .translate({ x: this.pageEnter ? 0 : 12, y: 0 })
+        .animation({ duration: 200, curve: Curve.EaseOut })
 
         // 拖拽时:顶部聊天区提示条
         if (this.dragActive) {
@@ -373,10 +487,13 @@ export struct ChatPage {
             .fontSize(13)
             .fontColor(Theme.BRAND)
             .padding({ left: 14, right: 14, top: 6, bottom: 6 })
-            .backgroundColor(Theme.BRAND_SOFT)
+            .backgroundColor(this.dropReady ? 'rgba(10,89,247,0.22)' : Theme.BRAND_SOFT)
             .borderRadius(14)
             .position({ x: '18%', y: 60 })
+            .scale({ x: this.dropReady ? 1.03 : 1.0, y: this.dropReady ? 1.03 : 1.0 })
+            .opacity(this.dropReady ? 1.0 : 0.92)
             .hitTestBehavior(HitTestMode.None)
+            .animation({ duration: 150, curve: Curve.EaseOut })
         }
 
         // 跟手浮层
@@ -387,27 +504,40 @@ export struct ChatPage {
                 .width(28).height(28).borderRadius(4).objectFit(ImageFit.Cover)
                 .margin({ right: 6 })
             } else {
-              Text('📄').fontSize(18).margin({ right: 6 })
+              Image($r('app.media.ic_file_hint'))
+                .width(18)
+                .height(18)
+                .objectFit(ImageFit.Contain)
+                .margin({ right: 6 })
             }
             Text(this.dragDoc!.name)
-              .fontSize(13).fontColor('#FFFFFF')
+              .fontSize(13).fontColor(Theme.TEXT_ON_BRAND)
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
               .constraintSize({ maxWidth: 140 })
           }
           .padding({ left: 8, right: 10, top: 6, bottom: 6 })
-          .backgroundColor('#FF8C00')
-          .borderRadius(10)
+          .backgroundColor(Theme.BRAND)
+          .borderRadius(Theme.RADIUS_SM)
+          .border({ width: this.dropReady ? 1.2 : 0, color: this.dropReady ? Theme.BRAND_SOFT_BORDER : 'transparent' })
           .position({ x: this.dragX - 60, y: this.dragY - 24 })
           .hitTestBehavior(HitTestMode.None)
-          .shadow({ radius: 8, color: 'rgba(0,0,0,0.4)', offsetX: 0, offsetY: 2 })
+          .shadow({
+            radius: this.dropReady ? 14 : 10,
+            color: this.dropReady ? 'rgba(11,23,48,0.18)' : 'rgba(11,23,48,0.10)',
+            offsetX: 0,
+            offsetY: this.dropReady ? 4 : 2
+          })
+          .scale({ x: this.dropReady ? 1.02 : 1.0, y: this.dropReady ? 1.02 : 1.0 })
+          .animation({ duration: 140, curve: Curve.EaseOut })
         }
 
         // History session sheet (full-overlay)
         if (this.historyVisible) {
           SessionHistorySheet({
             sessions: this.sessions,
+            open: this.historyOpen,
             currentId: this.session.id,
-            onClose: () => { this.historyVisible = false; },
+            onClose: () => this.closeHistorySheet(),
             onSwitch: (s: ChatSession) => this.switchSession(s),
             onNew: () => this.newSession(),
             onDelete: (s: ChatSession) => this.deleteSession(s)
@@ -419,5 +549,6 @@ export struct ChatPage {
     }
     .hideTitleBar(true)
     .backgroundColor(Theme.BG_PAGE)
+    .onShown(() => { this.pageEnter = true; })
   }
 }

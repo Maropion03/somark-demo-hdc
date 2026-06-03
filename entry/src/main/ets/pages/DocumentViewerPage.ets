@@ -1,10 +1,12 @@
 import { DocumentRecord } from '../model/Document';
 import { PageMarkdownSheet } from '../components/PageMarkdownSheet';
+import { ParsingIndicator } from '../components/ParsingIndicator';
 import { BboxImagePage } from '../components/BboxImagePage';
 import { MarkdownWeb } from '../components/MarkdownWeb';
 import { BlockRef, Citation } from '../model/Chat';
 import { SmPageInfo, SmBlock, parseSmDoc, classifyBlock, BlockEntity } from '../model/SmDoc';
 import { DocumentStore } from '../services/DocumentStore';
+import { DocumentParseService } from '../services/DocumentParseService';
 import { ShareHelper } from '../services/ShareHelper';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { call } from '@kit.TelephonyKit';
@@ -52,6 +54,8 @@ export struct DocumentViewerPage {
   @State curIdx: number = -1;
   @State pressing: boolean = false;   // 长按框选中
   @State carding: boolean = false;    // 操作卡显示
+  @State cardIn: boolean = false;     // 操作卡入场动效
+  @State pageEnter: boolean = false;
   private pageTopY: number[] = [];    // 各页图片全局 Y(onGeometry 上报)
   scroller: Scroller = new Scroller();
 
@@ -66,8 +70,10 @@ export struct DocumentViewerPage {
   };
   private mapController?: map.MapComponentController;
   private urlController: webview.WebviewController = new webview.WebviewController();
+  private parsingPollTimer: number = -1;
 
   aboutToAppear(): void {
+    this.pageEnter = false;
     try {
       this.screenW = this.getUIContext().px2vp(display.getDefaultDisplaySync().width);
     } catch (e) {
@@ -88,6 +94,33 @@ export struct DocumentViewerPage {
         aspects.push(r);
       }
       this.imgAspect = aspects;
+    }
+    this.startParsingPoll();
+  }
+
+  aboutToDisappear(): void {
+    this.stopParsingPoll();
+  }
+
+  startParsingPoll(): void {
+    this.stopParsingPoll();
+    const tick = () => {
+      const doc = this.currentDoc();
+      if (doc !== undefined && doc.status === 'parsing') {
+        try {
+          const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+          DocumentParseService.parseDocument(doc.id, context.cacheDir);
+        } catch (e) {}
+      }
+      this.parsingPollTimer = setTimeout(tick, 2500);
+    };
+    this.parsingPollTimer = setTimeout(tick, 600);
+  }
+
+  stopParsingPoll(): void {
+    if (this.parsingPollTimer >= 0) {
+      clearTimeout(this.parsingPollTimer);
+      this.parsingPollTimer = -1;
     }
   }
 
@@ -222,6 +255,82 @@ export struct DocumentViewerPage {
     return parts.join('\n\n');
   }
 
+  /** 操作卡预览是否需要 Web 渲染;纯文本走原生 Text,避免 WebView 冷启动白屏。 */
+  selectedNeedsWebPreview(): boolean {
+    if (this.anchorPage < 0) return false;
+    let loP: number = this.anchorPage;
+    let hiP: number = this.curPage;
+    if (!this.leq(this.anchorPage, this.anchorIdx, this.curPage, this.curIdx)) {
+      loP = this.curPage;
+      hiP = this.anchorPage;
+    }
+    for (let p = loP; p <= hiP; p++) {
+      const blocks: SmBlock[] = this.pageInfo(p).blocks;
+      for (const i of this.selectedPerPage(p)) {
+        const b: SmBlock = blocks[i];
+        if (b.type === 'figure' && b.imgUrl.length > 0) return true;
+        if (b.type === 'table' || b.type === 'tcaption') return true;
+        const c: string = b.content;
+        if (c.indexOf('<table') >= 0 || c.indexOf('<img') >= 0 || c.indexOf('$$') >= 0) return true;
+      }
+    }
+    return false;
+  }
+
+  private stripHtmlToPlain(html: string): string {
+    if (html.length === 0) return '';
+    let s: string = html.replace(/<br\s*\/?>/gi, '\n');
+    s = s.replace(/<\/p>/gi, '\n').replace(/<\/div>/gi, '\n');
+    s = s.replace(/<[^>]+>/g, '');
+    s = s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    return s.trim();
+  }
+
+  /** 原生预览文案(与 selectedMarkdown 同源,去掉 HTML 标签)。 */
+  selectedPreviewPlain(): string {
+    if (this.anchorPage < 0) return '';
+    let loP: number = this.anchorPage;
+    let hiP: number = this.curPage;
+    if (!this.leq(this.anchorPage, this.anchorIdx, this.curPage, this.curIdx)) {
+      loP = this.curPage;
+      hiP = this.anchorPage;
+    }
+    const parts: string[] = [];
+    for (let p = loP; p <= hiP; p++) {
+      const blocks: SmBlock[] = this.pageInfo(p).blocks;
+      for (const i of this.selectedPerPage(p)) {
+        const b: SmBlock = blocks[i];
+        if (b.type === 'figure' && b.imgUrl.length > 0) {
+          const desc: string = this.stripHtmlToPlain(b.content);
+          parts.push(desc.length > 0 ? `[图片] ${desc}` : '[图片]');
+        } else if (b.content.length > 0) {
+          const plain: string = this.stripHtmlToPlain(b.content);
+          if (plain.length > 0) parts.push(plain);
+        }
+      }
+    }
+    return parts.join('\n\n');
+  }
+
+  @Builder
+  selectionPreview() {
+    if (this.selectedNeedsWebPreview()) {
+      MarkdownWeb({
+        markdown: this.selectedMarkdown(),
+        autoHeight: true,
+        showLoading: true
+      })
+        .width('100%')
+    } else {
+      Text(this.selectedPreviewPlain())
+        .fontSize(15)
+        .fontColor(Theme.TEXT_PRIMARY)
+        .lineHeight(24)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+    }
+  }
+
   // ===== 手势(子组件转发全局坐标) =====
   onTapAt(gx: number, gy: number): void {
     const hit: Hit = this.hitGlobal(gx, gy);
@@ -230,6 +339,7 @@ export struct DocumentViewerPage {
     this.curPage = hit.page; this.curIdx = hit.idx;
     this.mdVisible = false;
     this.carding = true;
+    this.cardIn = true;
     this.prepareEntityPreview();
   }
 
@@ -251,11 +361,17 @@ export struct DocumentViewerPage {
   onPressEnd(): void {
     if (!this.pressing) return;
     this.pressing = false;
-    if (this.anchorPage >= 0) { this.mdVisible = false; this.carding = true; this.prepareEntityPreview(); }
+    if (this.anchorPage >= 0) {
+      this.mdVisible = false;
+      this.carding = true;
+      this.cardIn = true;
+      this.prepareEntityPreview();
+    }
   }
 
   closeCard(): void {
     this.carding = false;
+    this.cardIn = false;
     this.pressing = false;
     this.anchorPage = -1; this.anchorIdx = -1;
     this.curPage = -1; this.curIdx = -1;
@@ -438,10 +554,16 @@ export struct DocumentViewerPage {
     else if (e.kind === 'address') this.openMap(e.value);
   }
 
+  entityIcon(e: BlockEntity): ResourceStr {
+    if (e.kind === 'phone') return $r('app.media.ic_phone_brand');
+    if (e.kind === 'url') return $r('app.media.ic_web_brand');
+    return $r('app.media.ic_map_brand');
+  }
+
   entityLabel(e: BlockEntity): string {
-    if (e.kind === 'phone') return '📞 拨打 ' + e.value;
-    if (e.kind === 'url') return '🌐 在浏览器打开';
-    if (e.kind === 'address') return '🗺 在地图打开';
+    if (e.kind === 'phone') return '拨打 ' + e.value;
+    if (e.kind === 'url') return '在浏览器打开';
+    if (e.kind === 'address') return '在地图打开';
     return '';
   }
 
@@ -502,96 +624,120 @@ export struct DocumentViewerPage {
       Column()
         .width('100%').height('100%')
         .backgroundColor(Color.Transparent)
-        .backdropBlur(6)
+        .backdropBlur(8)
         .onClick(() => this.closeCard())
 
       Column() {
         Column() {
           if (this.hasEntityPreview()) {
-            // 有预览(网址/地址):卡片定高=最大,文字区受限,预览尽量占满剩余空间
-            Column() {
-              Scroll() {
-                MarkdownWeb({ markdown: this.selectedMarkdown(), autoHeight: true })
+            // 网址/地址:文案区自适应高度 + 地图/网页固定预览高度,整体可滚动
+            Scroll() {
+              Column() {
+                Column() {
+                  this.selectionPreview()
+                }
+                .width('100%')
+                .alignItems(HorizontalAlign.Start)
+                .padding({ left: 16, right: 16, top: 14, bottom: 12 })
+
+                if (this.selectedEntity()?.kind === 'address') {
+                  Stack({ alignContent: Alignment.Center }) {
+                    MapComponent({
+                      mapOptions: this.mapOptions,
+                      mapCallback: (err: BusinessError, controller: map.MapComponentController) => {
+                        if (!err) {
+                          this.mapController = controller;
+                          try { controller.setZoomControlsEnabled(false); } catch (e) { }
+                          this.applyMapCamera();
+                        } else {
+                          hilog.error(0x0000, TAG, 'map init err: ' + JSON.stringify(err));
+                        }
+                      }
+                    })
+                      .width('100%').height('100%')
+
+                    if (this.geoLoading) {
+                      Text('正在定位地址…').fontSize(13).fontColor(Theme.TEXT_SECONDARY)
+                    } else if (this.geoFailed) {
+                      Text('无法定位该地址,可点下方在地图中打开')
+                        .fontSize(13).fontColor(Theme.TEXT_SECONDARY)
+                        .padding(8).backgroundColor(Theme.BG_GLASS).borderRadius(Theme.RADIUS_SM)
+                    }
+                  }
                   .width('100%')
+                  .height(200)
+                  .margin({ left: 12, right: 12, bottom: 12 })
+                  .borderRadius(Theme.RADIUS_MD)
+                  .clip(true)
+                  .backgroundColor(Theme.BG_CARD)
+                } else {
+                  Web({ src: this.selectedEntity()!.value, controller: this.urlController })
+                    .javaScriptAccess(true)
+                    .domStorageAccess(true)
+                    .darkMode(WebDarkMode.Off)
+                    .width('100%')
+                    .height(200)
+                    .margin({ left: 12, right: 12, bottom: 12 })
+                    .borderRadius(Theme.RADIUS_MD)
+                    .clip(true)
+                    .backgroundColor(Theme.BG_CARD)
+                }
               }
               .width('100%')
-              .constraintSize({ maxHeight: '34%' })
-              .scrollBar(BarState.Auto)
-              .edgeEffect(EdgeEffect.Spring)
-
-              if (this.selectedEntity()?.kind === 'address') {
-                // 地址:原生地图预览,占满文字以下的全部空间
-                Stack({ alignContent: Alignment.Center }) {
-                  MapComponent({
-                    mapOptions: this.mapOptions,
-                    mapCallback: (err: BusinessError, controller: map.MapComponentController) => {
-                      if (!err) {
-                        this.mapController = controller;
-                        try { controller.setZoomControlsEnabled(false); } catch (e) { }
-                        this.applyMapCamera();
-                      } else {
-                        hilog.error(0x0000, TAG, 'map init err: ' + JSON.stringify(err));
-                      }
-                    }
-                  })
-                    .width('100%').height('100%')
-
-                  if (this.geoLoading) {
-                    Text('正在定位地址…').fontSize(13).fontColor(Theme.TEXT_SECONDARY)
-                  } else if (this.geoFailed) {
-                    Text('无法定位该地址,可点下方在地图中打开')
-                      .fontSize(13).fontColor(Theme.TEXT_SECONDARY)
-                      .padding(8).backgroundColor('rgba(255,255,255,0.85)').borderRadius(8)
-                  }
-                }
-                .width('92%').layoutWeight(1)
-                .margin({ top: 0, bottom: 14 })
-                .borderRadius(12).clip(true)
-                .backgroundColor(Theme.BG_CARD)
-              } else {
-                // 网址:原生 Web 顶层加载(非 iframe,规避 X-Frame-Options 白屏),占满剩余空间
-                Web({ src: this.selectedEntity()!.value, controller: this.urlController })
-                  .javaScriptAccess(true)
-                  .domStorageAccess(true)
-                  .darkMode(WebDarkMode.Off)
-                  .width('92%').layoutWeight(1)
-                  .margin({ top: 0, bottom: 14 })
-                  .borderRadius(12).clip(true)
-                  .backgroundColor('#FFFFFF')
-              }
-            }
-            .width('100%').height('62%')
-          } else {
-            // 纯文本:整卡按内容自适应高度,超过 maxHeight 时卡内可上下滑动查看
-            Scroll() {
-              MarkdownWeb({ markdown: this.selectedMarkdown(), autoHeight: true })
-                .width('100%')
             }
             .width('100%')
-            .constraintSize({ maxHeight: '60%' })
+            .constraintSize({ maxHeight: '68%' })
+            .scrollBar(BarState.Auto)
+            .edgeEffect(EdgeEffect.Spring)
+          } else {
+            // 纯文本:保证预览区有足够阅读面积,长文再在卡内滚动
+            Scroll() {
+              Column() {
+                this.selectionPreview()
+              }
+              .width('100%')
+              .alignItems(HorizontalAlign.Start)
+              .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+            }
+            .width('100%')
+            .constraintSize({ maxHeight: '56%' })
             .scrollBar(BarState.Auto)
             .edgeEffect(EdgeEffect.Spring)
           }
         }
         .width('86%')
         .backgroundColor(Theme.BG_CARD)
-        .borderRadius(16)
+        .borderRadius(Theme.RADIUS_LG)
         .clip(true)
-        .shadow({ radius: 18, color: 'rgba(0,0,0,0.18)', offsetX: 0, offsetY: 4 })
+        .shadow(Theme.SHADOW_FLOAT)
+        // 底部滑入：更明显的“sheet 弹出”手感
+        .opacity(this.cardIn ? 1.0 : 0.0)
+        .translate({ x: 0, y: this.cardIn ? 0 : 120 })
+        .scale({ x: this.cardIn ? 1 : 0.985, y: this.cardIn ? 1 : 0.985 })
+        .animation({ duration: 260, curve: Curve.EaseInOut })
 
         // 命中电话/网址/地址时:在 Add to Chat 上方多出一个次级动作按钮
         if (this.selectedEntity() !== null) {
-          Button(this.entityLabel(this.selectedEntity()!))
-            .width('86%')
-            .height(46)
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Theme.BRAND)
-            .backgroundColor(Theme.BG_CARD)
-            .borderRadius(16)
-            .margin({ top: 12 })
-            .border({ width: 1.5, color: Theme.BRAND })
-            .onClick(() => this.doEntityAction())
+          Button() {
+            Row() {
+              Image(this.entityIcon(this.selectedEntity()!))
+                .width(18)
+                .height(18)
+                .objectFit(ImageFit.Contain)
+                .margin({ right: 8 })
+              Text(this.entityLabel(this.selectedEntity()!))
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(Theme.BRAND)
+            }
+          }
+          .width('86%')
+          .height(46)
+          .backgroundColor(Theme.BG_CARD)
+          .borderRadius(Theme.RADIUS_LG)
+          .margin({ top: 12 })
+          .border({ width: 1.5, color: Theme.BRAND })
+          .onClick(() => this.doEntityAction())
         }
 
         Button('Add to Chat')
@@ -601,9 +747,9 @@ export struct DocumentViewerPage {
           .fontWeight(FontWeight.Medium)
           .fontColor(Theme.TEXT_ON_BRAND)
           .backgroundColor(Theme.BRAND)
-          .borderRadius(16)
+          .borderRadius(Theme.RADIUS_LG)
           .margin({ top: 12 })
-          .shadow({ radius: 12, color: 'rgba(255,140,0,0.25)', offsetX: 0, offsetY: 3 })
+          .shadow(Theme.SHADOW_SOFT)
           .onClick(() => this.doAdd())
       }
       .width('100%')
@@ -619,24 +765,52 @@ export struct DocumentViewerPage {
       Stack() {
         Column() {
           Row() {
-            Text('‹ 返回')
-              .fontSize(16).fontColor(Theme.BRAND)
-              .onClick(() => this.pathStack.pop())
+            Row() {
+              Image($r('app.media.ic_back_brand'))
+                .width(22)
+                .height(22)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(40)
+            .height(40)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => this.pathStack.pop())
             Text(this.currentDoc()?.name ?? '文档')
               .fontSize(17).fontColor(Theme.TEXT_PRIMARY)
               .layoutWeight(1).textAlign(TextAlign.Center)
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text('解析')
-              .fontSize(14).fontColor(Theme.BRAND).padding({ left: 6, right: 6 })
-              .onClick(() => this.openSheet(true))
-            Text('⋯')
-              .fontSize(20).fontColor(Theme.TEXT_PRIMARY).width(32).textAlign(TextAlign.Center)
-              .bindMenu(this.moreMenu())
+            Row() {
+              if (this.currentDoc()?.status === 'parsing') {
+                LoadingProgress()
+                  .width(14)
+                  .height(14)
+                  .color(Theme.BRAND)
+                  .margin({ right: 4 })
+              }
+              Text(this.currentDoc()?.status === 'parsing' ? '解析中' : '解析')
+                .fontSize(14)
+                .fontColor(this.currentDoc()?.status === 'parsing' ? Theme.TEXT_SECONDARY : Theme.BRAND)
+            }
+            .padding({ left: 6, right: 6 })
+            .onClick(() => this.openSheet(true))
+            Row() {
+              Image($r('app.media.ic_more_dark'))
+                .width(20)
+                .height(20)
+                .objectFit(ImageFit.Contain)
+            }
+            .width(40)
+            .height(40)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+            .bindMenu(this.moreMenu())
           }
           .width('100%')
           .padding({ left: 12, right: 8, top: 12, bottom: 8 })
-          .backgroundColor(Theme.BG_CARD)
+          .backgroundColor(Theme.BG_GLASS)
           .border({ width: { bottom: 0.5 }, color: Theme.DIVIDER })
+          .backdropBlur(20)
 
           if (this.currentDoc() === undefined) {
             Column() {
@@ -644,42 +818,63 @@ export struct DocumentViewerPage {
             }
             .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
           } else {
-            List({ scroller: this.scroller }) {
-              ForEach(this.currentDoc()!.originalImageUris, (uri: string, idx: number) => {
-                ListItem() {
-                  BboxImagePage({
-                    filePath: uri,
-                    page: this.pageInfo(idx),
-                    pageIndex: idx,
-                    selectedIdxs: this.selectedPerPage(idx),
-                    onGeometry: (pi: number, gy: number, w: number, h: number) => { this.pageTopY[pi] = gy; },
-                    onTapAt: (gx: number, gy: number) => this.onTapAt(gx, gy),
-                    onPressStart: (gx: number, gy: number) => this.onPressStart(gx, gy),
-                    onPressMove: (gx: number, gy: number) => this.onPressMove(gx, gy),
-                    onPressEnd: () => this.onPressEnd()
+            Stack({ alignContent: Alignment.Center }) {
+              List({ scroller: this.scroller }) {
+                ForEach(this.currentDoc()!.originalImageUris, (uri: string, idx: number) => {
+                  ListItem() {
+                    BboxImagePage({
+                      filePath: uri,
+                      page: this.pageInfo(idx),
+                      pageIndex: idx,
+                      selectedIdxs: this.selectedPerPage(idx),
+                      onGeometry: (pi: number, gy: number, w: number, h: number) => { this.pageTopY[pi] = gy; },
+                      onTapAt: (gx: number, gy: number) => this.onTapAt(gx, gy),
+                      onPressStart: (gx: number, gy: number) => this.onPressStart(gx, gy),
+                      onPressMove: (gx: number, gy: number) => this.onPressMove(gx, gy),
+                      onPressEnd: () => this.onPressEnd()
+                    })
+                      .height(this.pageHeight(idx))
+                  }
+                // key 含 pages 长度:解析完成时(空→非空)key 变化,BboxImagePage 重建,
+                // 拿到带 blocks 的新 page prop,后续点击/长按高亮才能正确渲染。
+                }, (uri: string, idx: number) => `${this.docId}_${idx}_${this.pages.length}`)
+              }
+              .width('100%')
+              .height('100%')
+              .scrollBar(BarState.Off)
+              .enableScrollInteraction(!this.pressing && this.currentDoc()!.status !== 'parsing')
+              .onDidScroll(() => {
+                const cp: number = this.centerPageFromScroll();
+                if (cp !== this.currentPage) this.currentPage = cp;
+              })
+              .priorityGesture(
+                SwipeGesture({ direction: SwipeDirection.Horizontal })
+                  .onAction((e: GestureEvent) => {
+                    if (!this.pressing && (e.angle > 135 || e.angle < -135)) {
+                      this.openSheet(false);
+                    }
                   })
-                    .height(this.pageHeight(idx))
+              )
+
+              if (this.currentDoc()!.status === 'parsing') {
+                Column()
+                  .width('100%')
+                  .height('100%')
+                  .backgroundColor(Theme.BG_MASK)
+                Column() {
+                  ParsingIndicator({
+                    message: '文档解析中…',
+                    hint: '完成后可框选内容并加入对话'
+                  })
                 }
-              // key 含 pages 长度:解析完成时(空→非空)key 变化,BboxImagePage 重建,
-              // 拿到带 blocks 的新 page prop,后续点击/长按高亮才能正确渲染。
-              }, (uri: string, idx: number) => `${this.docId}_${idx}_${this.pages.length}`)
+                .padding({ left: 24, right: 24, top: 20, bottom: 20 })
+                .backgroundColor(Theme.BG_CARD)
+                .borderRadius(Theme.RADIUS_LG)
+                .shadow(Theme.SHADOW_FLOAT)
+              }
             }
             .layoutWeight(1)
             .width('100%')
-            .scrollBar(BarState.Off)
-            .enableScrollInteraction(!this.pressing)
-            .onDidScroll(() => {
-              const cp: number = this.centerPageFromScroll();
-              if (cp !== this.currentPage) this.currentPage = cp;
-            })
-            .priorityGesture(
-              SwipeGesture({ direction: SwipeDirection.Horizontal })
-                .onAction((e: GestureEvent) => {
-                  if (!this.pressing && (e.angle > 135 || e.angle < -135)) {
-                    this.openSheet(false);
-                  }
-                })
-            )
 
             Row() {
               Text(`${this.currentPage + 1} / ${this.currentDoc()!.originalImageUris.length}`)
@@ -720,8 +915,12 @@ export struct DocumentViewerPage {
       }
       .width('100%')
       .height('100%')
+      .opacity(this.pageEnter ? 1 : 0.92)
+      .translate({ x: this.pageEnter ? 0 : 12, y: 0 })
+      .animation({ duration: 200, curve: Curve.EaseOut })
     }
     .hideTitleBar(true)
     .backgroundColor(Theme.BG_PAGE)
+    .onShown(() => { this.pageEnter = true; })
   }
 }

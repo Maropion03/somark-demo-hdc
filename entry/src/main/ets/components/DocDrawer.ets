@@ -9,7 +9,7 @@ import { Theme } from '../common/Theme';
  */
 @Component
 export struct DocDrawer {
-  @Link expanded: boolean;
+  @Link @Watch('onExpandedChange') expanded: boolean;
   @Prop documents: DocumentRecord[] = [];
   @Prop dropHover: boolean = false;
   onPick: (doc: DocumentRecord) => void = () => {};
@@ -19,6 +19,29 @@ export struct DocDrawer {
   onPickRelease: (x: number, y: number) => void = () => {};
   @State query: string = '';
   @State searching: boolean = false;
+  // 0=收起,1=展开:统一驱动材质/层级动效
+  @State t: number = 0;
+
+  onExpandedChange(): void {
+    this.t = this.expanded ? 1 : 0;
+  }
+
+  rgbaWhite(alpha: number): string {
+    // 避免在样式属性里使用模板字符串导致构建器解析异常
+    return 'rgba(255,255,255,' + alpha + ')';
+  }
+
+  rgbaDark(alpha: number): string {
+    return 'rgba(11,23,48,' + alpha + ')';
+  }
+
+  glassAlpha(): number {
+    return 0.70 + 0.18 * this.t;
+  }
+
+  shadowAlpha(): number {
+    return 0.10 + 0.06 * this.t;
+  }
 
   filtered(): DocumentRecord[] {
     const q: string = this.query.trim().toLowerCase();
@@ -36,38 +59,50 @@ export struct DocDrawer {
       Row()
         .width(40)
         .height(4)
-        .backgroundColor('rgba(0,0,0,0.2)')
+        .backgroundColor(Theme.BORDER)
         .borderRadius(2)
         .margin({ top: 8, bottom: 6 })
       Text(this.expanded ? '下滑收起 · 长按文档拖入对话' : `上滑展开 · ${this.documents.length} 篇文档`)
         .fontSize(12)
         .fontColor(Theme.TEXT_SECONDARY)
         .margin({ bottom: 8 })
+        .opacity(0.68 + 0.32 * this.t)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Center)
-    .onClick(() => { this.expanded = !this.expanded; })
+    .onClick(() => {
+      this.expanded = !this.expanded;
+    })
     .gesture(
       PanGesture({ direction: PanDirection.Vertical })
         .onActionEnd((e: GestureEvent) => {
-          if (e.offsetY < -20) this.expanded = true;
-          else if (e.offsetY > 20) this.expanded = false;
+          if (e.offsetY < -20) {
+            this.expanded = true;
+          } else if (e.offsetY > 20) {
+            this.expanded = false;
+          }
         })
     )
+    .animation({ duration: 260, curve: Curve.EaseOut })
   }
 
   @Builder
   searchBar() {
     Row() {
-      Text('🔍').fontSize(15).margin({ right: 8 })
+      Image($r('app.media.ic_search_hint'))
+        .width(18)
+        .height(18)
+        .objectFit(ImageFit.Contain)
+        .margin({ right: 8 })
       TextInput({ placeholder: '搜索文档内容…', text: this.query })
         .layoutWeight(1)
         .fontSize(14)
         .fontColor(Theme.TEXT_PRIMARY)
         .placeholderColor(Theme.TEXT_HINT)
         .backgroundColor(Theme.BG_SUBTLE)
-        .borderRadius(10)
+        .borderRadius(Theme.RADIUS_SM)
         .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+        .border({ width: 1, color: Theme.BORDER })
         .onChange((v: string) => { this.query = v; })
       if (this.query.length > 0) {
         Text('清除')
@@ -97,6 +132,7 @@ export struct DocDrawer {
           .width('100%')
           .justifyContent(FlexAlign.Center)
         } else {
+          // 恢复为原来的两列卡片网格排布
           Grid() {
             ForEach(this.filtered(), (doc: DocumentRecord) => {
               GridItem() {
@@ -121,13 +157,19 @@ export struct DocDrawer {
     }
     .width('100%')
     .height(this.expanded ? '55%' : 36)
-    .backgroundColor(Theme.BG_CARD)
-    .borderRadius({ topLeft: 16, topRight: 16 })
+    .backgroundColor(this.rgbaWhite(this.glassAlpha()))
+    .backdropBlur(16 + 14 * this.t)
+    .borderRadius({ topLeft: Theme.RADIUS_XL, topRight: Theme.RADIUS_XL })
     .border({
       width: this.dropHover ? 2 : 0.5,
       color: this.dropHover ? Theme.BRAND : Theme.DIVIDER
     })
-    .shadow({ radius: 12, color: 'rgba(0,0,0,0.08)', offsetX: 0, offsetY: -2 })
+    .shadow({
+      radius: 16 + 10 * this.t,
+      color: this.rgbaDark(this.shadowAlpha()),
+      offsetX: 0,
+      offsetY: -2 - 3 * this.t
+    })
     .animation({ duration: 220, curve: Curve.EaseOut })
   }
 }

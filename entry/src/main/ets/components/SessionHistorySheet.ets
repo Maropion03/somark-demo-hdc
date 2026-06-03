@@ -1,6 +1,7 @@
 import { ChatSession } from '../model/Chat';
 import { ChatSessionStore } from '../services/ChatSessionStore';
 import { Theme } from '../common/Theme';
+import { http } from '@kit.NetworkKit';
 
 /**
  * 历史会话抽屉 —— 从屏幕右侧滑入,展示所有会话(置顶在前,按更新时间倒序)。
@@ -9,6 +10,7 @@ import { Theme } from '../common/Theme';
 @Component
 export struct SessionHistorySheet {
   @Prop sessions: ChatSession[] = [];
+  @Prop open: boolean = true;
   currentId: string = '';
   onClose: () => void = () => {};
   onSwitch: (s: ChatSession) => void = () => {};
@@ -16,6 +18,27 @@ export struct SessionHistorySheet {
   onDelete: (s: ChatSession) => void = () => {};
   @State renaming: ChatSession | null = null;
   @State renameText: string = '';
+
+  debugLog(hypothesisId: string, location: string, message: string, data: string): void {
+    const req = http.createHttp();
+    const payload: string = JSON.stringify({
+      sessionId: '546962',
+      runId: 'history-switch',
+      hypothesisId: hypothesisId,
+      location: location,
+      message: message,
+      data: data,
+      timestamp: Date.now()
+    });
+    req.request('http://127.0.0.1:7553/ingest/ab900cb5-5ffc-44a9-b4ee-9d5b39d582b9', {
+      method: http.RequestMethod.POST,
+      header: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '546962'
+      },
+      extraData: payload
+    }).catch(() => {}).finally(() => req.destroy());
+  }
 
   sortedSessions(): ChatSession[] {
     const copy = [...this.sessions];
@@ -73,7 +96,8 @@ export struct SessionHistorySheet {
     Column() {
       Column()
         .width('100%').height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
+        .backgroundColor(Theme.BG_MASK)
+        .backdropBlur(10)
         .onClick(() => { this.renaming = null; })
       Column() {
         Text('重命名会话')
@@ -81,17 +105,20 @@ export struct SessionHistorySheet {
           .width('100%').padding({ bottom: 12 })
         TextInput({ text: this.renameText })
           .fontSize(15).fontColor(Theme.TEXT_PRIMARY)
-          .backgroundColor(Theme.BG_SUBTLE).borderRadius(8)
+          .backgroundColor(Theme.BG_SUBTLE).borderRadius(Theme.RADIUS_SM)
+          .border({ width: 1, color: Theme.BORDER })
           .padding(10)
           .onChange((v: string) => { this.renameText = v; })
         Row() {
           Button('取消')
             .layoutWeight(1).height(40)
             .backgroundColor(Theme.BG_SUBTLE).fontColor(Theme.TEXT_PRIMARY).fontSize(14)
+            .borderRadius(Theme.RADIUS_SM)
             .onClick(() => { this.renaming = null; })
           Button('确定')
             .layoutWeight(1).height(40)
             .backgroundColor(Theme.BRAND).fontColor(Theme.TEXT_ON_BRAND).fontSize(14)
+            .borderRadius(Theme.RADIUS_SM)
             .margin({ left: 10 })
             .onClick(() => this.commitRename())
         }
@@ -99,8 +126,10 @@ export struct SessionHistorySheet {
       }
       .width('80%')
       .padding(18)
-      .backgroundColor(Theme.BG_CARD)
-      .borderRadius(14)
+      .backgroundColor(Theme.BG_GLASS)
+      .backdropBlur(20)
+      .borderRadius(Theme.RADIUS_LG)
+      .shadow(Theme.SHADOW_FLOAT)
       .position({ x: '10%', y: '34%' })
     }
     .width('100%').height('100%')
@@ -108,15 +137,41 @@ export struct SessionHistorySheet {
   }
 
   @Builder
+  newSessionRow() {
+    Row() {
+      Text('+')
+        .fontSize(18)
+        .fontColor(Theme.TEXT_ON_BRAND)
+        .margin({ right: 8 })
+      Text('新建对话')
+        .fontSize(15)
+        .fontColor(Theme.TEXT_ON_BRAND)
+        .fontWeight(FontWeight.Medium)
+    }
+    .width('100%')
+    .height(44)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(Theme.BRAND)
+    .borderRadius(Theme.RADIUS_LG)
+    .margin({ bottom: 10 })
+    .onClick(() => this.onNew())
+  }
+
+  @Builder
   sessionRow(s: ChatSession) {
     Row() {
       if (s.pinned) {
-        Text('📌').fontSize(13).margin({ right: 6 })
+        Image($r('app.media.ic_pin_hint'))
+          .width(16)
+          .height(16)
+          .objectFit(ImageFit.Contain)
+          .margin({ right: 6 })
       }
       Column() {
         Text(s.title)
           .fontSize(15)
-          .fontColor(Theme.TEXT_PRIMARY)
+          .fontColor(s.id === this.currentId ? Theme.BRAND : Theme.TEXT_PRIMARY)
+          .fontWeight(s.id === this.currentId ? FontWeight.Medium : FontWeight.Normal)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(`${s.messages.length} 条消息`)
@@ -133,13 +188,19 @@ export struct SessionHistorySheet {
           .fontColor(Theme.BRAND)
           .padding({ left: 6, right: 6, top: 2, bottom: 2 })
           .backgroundColor(Theme.BRAND_SOFT)
-          .borderRadius(8)
+          .borderRadius(999)
       }
     }
     .width('100%')
-    .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-    .backgroundColor(s.id === this.currentId ? Theme.BRAND_SOFT : Color.Transparent)
-    .onClick(() => this.onSwitch(s))
+    .padding({ left: 12, right: 12, top: 11, bottom: 11 })
+    .backgroundColor(s.id === this.currentId ? 'rgba(10,89,247,0.10)' : Color.Transparent)
+    .borderRadius(Theme.RADIUS_LG)
+    .onClick(() => {
+      // #region agent log
+      this.debugLog('H8', 'SessionHistorySheet.sessionRow:onClick', 'row click', `sessionId=${s.id},title=${s.title},currentId=${this.currentId}`);
+      // #endregion
+      this.onSwitch(s);
+    })
     .gesture(LongPressGesture({ duration: 350 }).onAction(() => this.showLongPressMenu(s)))
   }
 
@@ -149,7 +210,10 @@ export struct SessionHistorySheet {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
+        .backgroundColor(Theme.BG_MASK)
+        .opacity(this.open ? 1 : 0)
+        .backdropBlur(10)
+        .animation({ duration: 240, curve: Curve.EaseInOut })
         .onClick(() => this.onClose())
 
       // 右侧抽屉
@@ -160,53 +224,57 @@ export struct SessionHistorySheet {
             .fontColor(Theme.TEXT_PRIMARY)
             .fontWeight(FontWeight.Medium)
             .layoutWeight(1)
-          Text('×')
-            .fontSize(22)
-            .fontColor(Theme.TEXT_SECONDARY)
+          Image($r('app.media.ic_close_dark'))
+            .width(18)
+            .height(18)
             .width(36).height(36)
-            .textAlign(TextAlign.Center)
+            .objectFit(ImageFit.Contain)
             .onClick(() => this.onClose())
         }
         .width('100%')
-        .padding({ left: 14, right: 8, top: 12, bottom: 8 })
+        .padding({ left: 14, right: 10, top: 12, bottom: 8 })
 
-        Button() {
-          Row() {
-            Text('+').fontSize(20).fontColor(Theme.TEXT_ON_BRAND).margin({ right: 6 })
-            Text('新建对话').fontSize(14).fontColor(Theme.TEXT_ON_BRAND)
+        // 统一左右留白,避免按钮/选中态铺满侧栏
+        Column() {
+          this.newSessionRow()
+
+          List() {
+            ForEach(this.sortedSessions(), (s: ChatSession) => {
+              ListItem() {
+                this.sessionRow(s)
+              }
+              .margin({ top: 3, bottom: 3 })
+            }, (s: ChatSession) => s.id + '_' + s.title + '_' + (s.pinned ? '1' : '0') + '_' + s.messages.length)
           }
-        }
-        .width('92%')
-        .height(40)
-        .backgroundColor(Theme.BRAND)
-        .borderRadius(8)
-        .margin({ bottom: 8 })
-        .onClick(() => this.onNew())
-
-        Divider().color(Theme.DIVIDER)
-
-        List() {
-          ForEach(this.sortedSessions(), (s: ChatSession) => {
-            ListItem() {
-              this.sessionRow(s)
-            }
-          }, (s: ChatSession) => s.id + '_' + s.title + '_' + (s.pinned ? '1' : '0') + '_' + s.messages.length)
+          .layoutWeight(1)
+          .width('100%')
+          .padding({ top: 4, bottom: 4 })
+          .scrollBar(BarState.Off)
         }
         .layoutWeight(1)
         .width('100%')
-        .divider({ strokeWidth: 0.5, color: Theme.DIVIDER })
+        .padding({ left: 12, right: 12 })
 
         Text('长按会话条进行重命名 / 置顶 / 删除')
           .fontSize(11)
           .fontColor(Theme.TEXT_HINT)
           .width('100%')
           .textAlign(TextAlign.Center)
-          .padding({ top: 6, bottom: 12 })
+          .padding({ left: 12, right: 12, top: 6, bottom: 12 })
       }
       .width('82%')
       .height('100%')
-      .backgroundColor(Theme.BG_CARD)
+      .backgroundColor(Theme.BG_GLASS)
+      .backdropBlur(24)
       .border({ width: { left: 0.5 }, color: Theme.DIVIDER })
+      // 再加大一档圆角，让侧边更柔和
+      .borderRadius({ topLeft: 30, bottomLeft: 30 })
+      .clip(true)
+      .shadow(Theme.SHADOW_FLOAT)
+      .translate({ x: this.open ? 0 : 32, y: 0 })
+      .opacity(this.open ? 1 : 0)
+      .scale({ x: this.open ? 1 : 0.985, y: this.open ? 1 : 0.985 })
+      .animation({ duration: 240, curve: Curve.EaseInOut })
 
       if (this.renaming !== null) {
         this.renameDialog()
