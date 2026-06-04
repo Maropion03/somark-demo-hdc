@@ -1,4 +1,4 @@
-import { ChatMessage, Citation } from '../model/Chat';
+import { ChatMessage, Citation, citeKey } from '../model/Chat';
 import { CiteChip } from './CiteChip';
 import { MarkdownView } from './MarkdownView';
 import { Theme } from '../common/Theme';
@@ -25,6 +25,36 @@ export struct ChatMessageList {
     return false;
   }
 
+  /** 空会话欢迎区:图形标 + 品牌名 + 引导文案,纵向居中。 */
+  @Builder
+  emptyWelcome() {
+    Column() {
+      Image($r('app.media.ic_somark_mark'))
+        .width(52)
+        .height(42)
+        .objectFit(ImageFit.Contain)
+      Text('SoMark')
+        .fontSize(24)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Theme.TEXT_PRIMARY)
+        .margin({ top: 12 })
+      Text('今天有什么可以帮到你？')
+        .fontSize(20)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Theme.TEXT_PRIMARY)
+        .textAlign(TextAlign.Center)
+        .margin({ top: 20 })
+      Text('从底部拖入文档，或在输入框直接提问')
+        .fontSize(14)
+        .fontColor(Theme.TEXT_HINT)
+        .lineHeight(20)
+        .margin({ top: 8 })
+        .textAlign(TextAlign.Center)
+    }
+    .alignItems(HorizontalAlign.Center)
+    .padding({ left: 24, right: 24 })
+  }
+
   @Builder
   citeRow(citations: Citation[], inUserBubble: boolean) {
     if (citations.length > 0) {
@@ -39,7 +69,7 @@ export struct ChatMessageList {
             })
           }
           .margin({ right: 6, bottom: 6 })
-        }, (c: Citation, idx: number) => `cite_${idx}`)
+        }, (c: Citation) => citeKey(c))
       }
     }
   }
@@ -141,12 +171,12 @@ export struct ChatMessageList {
       Column({ space: 12 }) {
         if (this.messages.length === 0) {
           Column() {
-            Text('从底部抽屉拖入文档,或直接提问')
-              .fontSize(14)
-              .fontColor(Theme.TEXT_HINT)
+            this.emptyWelcome()
           }
           .width('100%')
-          .padding({ top: 80 })
+          .constraintSize({ minHeight: 400 })
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
         } else {
           ForEach(this.messages, (m: ChatMessage) => {
             if (m.role === 'user') {

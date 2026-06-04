@@ -138,6 +138,56 @@ export function classifyBlock(content: string): BlockEntity | null {
   return null;
 }
 
+export interface EntityRange {
+  start: number;
+  end: number;
+}
+
+/** 在原文(纯文本或 HTML 字符串)中定位电话/网址/地址片段,供虚线下划线标注。 */
+export function findEntityRangeInText(text: string, entity: BlockEntity): EntityRange | null {
+  if (text.length === 0) {
+    return null;
+  }
+  if (entity.kind === 'url') {
+    const reU: RegExp = new RegExp(URL_RE.source, 'i');
+    const m: RegExpExecArray | null = reU.exec(text);
+    if (m !== null) {
+      return { start: m.index, end: m.index + m[0].length };
+    }
+  }
+  if (entity.kind === 'phone') {
+    const reP: RegExp = new RegExp(PHONE_RE.source, 'g');
+    const m: RegExpExecArray | null = reP.exec(text);
+    if (m !== null) {
+      return { start: m.index, end: m.index + m[0].length };
+    }
+  }
+  if (entity.kind === 'address') {
+    const idx: number = text.indexOf(entity.value);
+    if (idx >= 0) {
+      return { start: idx, end: idx + entity.value.length };
+    }
+    const reA: RegExp = new RegExp(ADDR_CHAIN_RE.source, 'g');
+    const m: RegExpExecArray | null = reA.exec(text);
+    if (m !== null && m[0].length > 0 && adminLevelCount(m[0]) >= 2) {
+      return { start: m.index, end: m.index + m[0].length };
+    }
+  }
+  return null;
+}
+
+/** 在 HTML/Markdown 片段外包 somark-entity,供 Web 预览渲染虚线下划线。 */
+export function markEntityInText(text: string, entity: BlockEntity): string {
+  const range: EntityRange | null = findEntityRangeInText(text, entity);
+  if (range === null) {
+    return text;
+  }
+  const before: string = text.substring(0, range.start);
+  const mid: string = text.substring(range.start, range.end);
+  const after: string = text.substring(range.end);
+  return before + `<span class="somark-entity">${mid}</span>` + after;
+}
+
 /** 解析 parsedJson 成带 bbox 的页数组。失败返回空。 */
 export function parseSmDoc(parsedJson: string): SmPageInfo[] {
   const result: SmPageInfo[] = [];

@@ -1,20 +1,18 @@
 import { fileUri } from '@kit.CoreFileKit';
 import { SmPageInfo, SmBlock, blockTypeColor } from '../model/SmDoc';
+import { Theme } from '../common/Theme';
 
 /**
  * 单页扫描图 + bbox 选区高亮层(PRD §7)。
- * 本组件只负责:① 渲染图片;② 按父级下发的 selectedIdxs 画高亮;③ 把点按/长按手势的**全局坐标**转给父级。
- * 选区状态、跨页 hit-test、操作卡都在父级(DocumentViewerPage)统一处理 —— 以支持跨页多选。
  */
 @Component
 export struct BboxImagePage {
   filePath: string = '';
   page: SmPageInfo = { pageNum: 0, w: 0, h: 0, blocks: [] };
   pageIndex: number = 0;
-  @Prop selectedIdxs: number[] = [];   // 本页被选中的 block 数组下标(父级下发)
-  // 几何上报:本页图片显示宽/高 + 全局 Y
+  @Prop selectedIdxs: number[] = [];
+  @Prop entityIdxs: number[] = [];
   onGeometry: (pageIndex: number, globalY: number, w: number, h: number) => void = () => {};
-  // 手势转发(全局坐标)
   onTapAt: (gx: number, gy: number) => void = () => {};
   onPressStart: (gx: number, gy: number) => void = () => {};
   onPressMove: (gx: number, gy: number) => void = () => {};
@@ -49,6 +47,23 @@ export struct BboxImagePage {
           .hitTestBehavior(HitTestMode.None)
       }
     }, (arrIdx: number) => `sel_${this.pageIndex}_${arrIdx}`)
+  }
+
+  @Builder
+  entityBottomMarks() {
+    ForEach(this.entityIdxs, (arrIdx: number) => {
+      if (this.blockByIdx(arrIdx) !== undefined) {
+        Row()
+          .position({
+            x: this.blockByIdx(arrIdx)!.x1 * this.fitScale(),
+            y: (this.blockByIdx(arrIdx)!.y2 * this.fitScale()) - 2
+          })
+          .width((this.blockByIdx(arrIdx)!.x2 - this.blockByIdx(arrIdx)!.x1) * this.fitScale())
+          .height(0)
+          .border({ width: { top: 2 }, color: Theme.BRAND, style: BorderStyle.Dashed })
+          .hitTestBehavior(HitTestMode.None)
+      }
+    }, (arrIdx: number) => `ent_${this.pageIndex}_${arrIdx}`)
   }
 
   build() {
@@ -87,6 +102,7 @@ export struct BboxImagePage {
         )
 
       this.highlights()
+      this.entityBottomMarks()
     }
     .width('100%')
     .height('100%')

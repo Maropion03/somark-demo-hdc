@@ -9,7 +9,7 @@ import { ChatInputBar } from '../components/ChatInputBar';
 import { DocDrawer } from '../components/DocDrawer';
 import { SessionHistorySheet } from '../components/SessionHistorySheet';
 import {
-  ChatSession, ChatMessage, Citation, DocRef, BlockRef,
+  ChatSession, ChatMessage, Citation, DocRef, BlockRef, citeKey,
   newUserMessage, newAssistantMessage, newChatSession
 } from '../model/Chat';
 import { DocumentRecord } from '../model/Document';
@@ -264,11 +264,9 @@ export struct ChatPage {
   }
 
   onPickDoc(doc: DocumentRecord): void {
-    const exists = this.pendingCitations.find((c: Citation) =>
-      c.kind === 'doc' && (c as DocRef).docId === doc.id
-    );
-    if (exists !== undefined) return;
     const ref: DocRef = { kind: 'doc', docId: doc.id, docName: doc.name };
+    const exists = this.pendingCitations.find((c: Citation) => citeKey(c) === citeKey(ref));
+    if (exists !== undefined) return;
     this.pendingCitations = [...this.pendingCitations, ref];
     this.drawerExpanded = false;
   }
@@ -282,16 +280,11 @@ export struct ChatPage {
     this.pathStack.pushPath({ name: 'DocumentViewerPage', param: doc.id });
   }
 
-  citeKey(c: Citation): string {
-    if (c.kind === 'doc') return 'doc_' + (c as DocRef).docId;
-    const b = c as BlockRef;
-    return 'block_' + b.docId + '_' + b.pageIndex + '_' + b.blockIndices.join(',');
-  }
-
-  onRemoveCite(cite: Citation): void {
-    // @Prop 把 citations 深拷贝给了子组件,回传的是副本,引用 !== 比不出 —— 按内容 key 比。
-    const key: string = this.citeKey(cite);
-    this.pendingCitations = this.pendingCitations.filter((c: Citation) => this.citeKey(c) !== key);
+  onRemoveCite(index: number): void {
+    if (index < 0 || index >= this.pendingCitations.length) {
+      return;
+    }
+    this.pendingCitations = this.pendingCitations.filter((_: Citation, i: number) => i !== index);
   }
 
   onLongPressMsg(m: ChatMessage): void {
@@ -467,7 +460,7 @@ export struct ChatPage {
             citations: this.pendingCitations,
             sending: this.sending,
             dropHover: this.dragActive,
-            onRemoveCite: (c: Citation) => this.onRemoveCite(c),
+            onRemoveCite: (index: number) => this.onRemoveCite(index),
             onSend: (t: string) => this.onSend(t),
             onStop: () => this.stopGenerate()
           })
@@ -487,7 +480,7 @@ export struct ChatPage {
             .fontSize(13)
             .fontColor(Theme.BRAND)
             .padding({ left: 14, right: 14, top: 6, bottom: 6 })
-            .backgroundColor(this.dropReady ? 'rgba(10,89,247,0.22)' : Theme.BRAND_SOFT)
+            .backgroundColor(this.dropReady ? 'rgba(255,140,0,0.22)' : Theme.BRAND_SOFT)
             .borderRadius(14)
             .position({ x: '18%', y: 60 })
             .scale({ x: this.dropReady ? 1.03 : 1.0, y: this.dropReady ? 1.03 : 1.0 })

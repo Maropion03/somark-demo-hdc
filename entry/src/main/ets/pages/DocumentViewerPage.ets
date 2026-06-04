@@ -2,9 +2,13 @@ import { DocumentRecord } from '../model/Document';
 import { PageMarkdownSheet } from '../components/PageMarkdownSheet';
 import { ParsingIndicator } from '../components/ParsingIndicator';
 import { BboxImagePage } from '../components/BboxImagePage';
+import { DocumentThumbRail } from '../components/DocumentThumbRail';
 import { MarkdownWeb } from '../components/MarkdownWeb';
 import { BlockRef, Citation } from '../model/Chat';
-import { SmPageInfo, SmBlock, parseSmDoc, classifyBlock, BlockEntity } from '../model/SmDoc';
+import {
+  SmPageInfo, SmBlock, parseSmDoc, classifyBlock, BlockEntity, EntityRange,
+  findEntityRangeInText, markEntityInText
+} from '../model/SmDoc';
 import { DocumentStore } from '../services/DocumentStore';
 import { DocumentParseService } from '../services/DocumentParseService';
 import { ShareHelper } from '../services/ShareHelper';
@@ -55,9 +59,19 @@ export struct DocumentViewerPage {
   @State pressing: boolean = false;   // 长按框选中
   @State carding: boolean = false;    // 操作卡显示
   @State cardIn: boolean = false;     // 操作卡入场动效
+  /** 避免「点开操作卡」与「点背景关闭」同一次触摸串联。 */
+  @State private ignoreCardBackdropOnce: boolean = false;
   @State pageEnter: boolean = false;
+  @State contentViewportH: number = 640;
+  @State thumbRailVisible: boolean = false;
+  @State thumbRailIn: boolean = false;
   private pageTopY: number[] = [];    // 各页图片全局 Y(onGeometry 上报)
   scroller: Scroller = new Scroller();
+  /** 多页时页间距。 */
+  private readonly pageGapV: number = 12;
+  private readonly pageSideMargin: number = 16;
+  private readonly previewBg: string = '#FFFFFF';
+  private readonly pageFrameBorder: string = '#000000';
 
   // ===== 地址 → 原生地图预览(Map Kit)=====
   @State geoLoading: boolean = false;   // 地理编码进行中
@@ -139,16 +153,78 @@ export struct DocumentViewerPage {
     return this.documents.find((d: DocumentRecord) => d.id === this.docId);
   }
 
+  isMultiPageDoc(): boolean {
+    const doc = this.currentDoc();
+    return doc !== undefined && doc.originalImageUris.length > 1;
+  }
+
+  pageContentWidth(): number {
+    const w: number = this.screenW - this.pageSideMargin * 2;
+    return w > 120 ? w : 120;
+  }
+
+  openThumbRail(): void {
+    if (!this.isMultiPageDoc()) {
+      return;
+    }
+    this.thumbRailVisible = true;
+    this.thumbRailIn = false;
+    setTimeout(() => {
+      if (this.thumbRailVisible) {
+        this.thumbRailIn = true;
+      }
+    }, 16);
+  }
+
+  closeThumbRail(): void {
+    if (!this.thumbRailVisible) {
+      return;
+    }
+    this.thumbRailIn = false;
+    this.thumbRailVisible = false;
+  }
+
+  onThumbPageSelect(idx: number): void {
+    this.scrollToPageIndex(idx);
+  }
+
   pageHeight(idx: number): number {
-    // 优先用图片真实比例(解析前也准),否则退化用 page_size,再退化 A4
+    const cw: number = this.pageContentWidth();
     if (idx < this.imgAspect.length && this.imgAspect[idx] > 0) {
-      return this.screenW * this.imgAspect[idx];
+      return cw * this.imgAspect[idx];
     }
     if (idx < this.pages.length) {
       const p: SmPageInfo = this.pages[idx];
-      if (p.w > 0 && p.h > 0) return this.screenW * (p.h / p.w);
+      if (p.w > 0 && p.h > 0) {
+        return cw * (p.h / p.w);
+      }
     }
-    return this.screenW * 1.414;
+    return cw * 1.414;
+  }
+
+  pageSlotHeight(idx: number): number {
+    return this.pageHeight(idx) + this.pageGapV;
+  }
+
+  pageScrollTop(p: number): number {
+    let acc: number = 0;
+    for (let i = 0; i < p; i++) {
+      acc += this.pageSlotHeight(i);
+    }
+    return acc;
+  }
+
+  scrollToPageIndex(p: number): void {
+    const doc = this.currentDoc();
+    if (doc === undefined || p < 0 || p >= doc.originalImageUris.length) {
+      return;
+    }
+    try {
+      this.scroller.scrollTo({ xOffset: 0, yOffset: this.pageScrollTop(p), animation: true });
+    } catch (e) {
+      // ignore
+    }
+    this.currentPage = p;
   }
 
   emptyPage(): SmPageInfo {
@@ -161,7 +237,8 @@ export struct DocumentViewerPage {
 
   pageScale(p: number): number {
     const pi: SmPageInfo = this.pageInfo(p);
-    return pi.w > 0 ? this.screenW / pi.w : 1;
+    const cw: number = this.pageContentWidth();
+    return pi.w > 0 ? cw / pi.w : 1;
   }
 
   // 容器框(包住别的 block)→ 不可选
@@ -227,6 +304,21 @@ export struct DocumentViewerPage {
     return out;
   }
 
+  /** 本页所有命中电话/网址/地址的 block(解析完成后常态展示底边虚线,不依赖选区)。 */
+  entityIdxsPerPage(p: number): number[] {
+    const blocks: SmBlock[] = this.pageInfo(p).blocks;
+    const out: number[] = [];
+    for (let i = 0; i < blocks.length; i++) {
+      if (this.isContainer(p, i)) {
+        continue;
+      }
+      if (classifyBlock(blocks[i].content) !== null) {
+        out.push(i);
+      }
+    }
+    return out;
+  }
+
   selectedMarkdown(): string {
     if (this.anchorPage < 0) return '';
     let loP: number = this.anchorPage; let hiP: number = this.curPage;
@@ -244,7 +336,14 @@ export struct DocumentViewerPage {
           const desc: string = b.content.length > 0 ? `<p>${b.content}</p>` : '';
           parts.push(`<figure class="img-frame"><img src="${b.imgUrl}" />${desc}</figure>`);
         } else if (b.content.length > 0) {
-          parts.push(b.content);
+          let chunk: string = b.content;
+          if (p === this.anchorPage && i === this.anchorIdx && this.anchorPage === this.curPage) {
+            const ent: BlockEntity | null = classifyBlock(b.content);
+            if (ent !== null) {
+              chunk = markEntityInText(chunk, ent);
+            }
+          }
+          parts.push(chunk);
         }
       }
     }
@@ -312,6 +411,67 @@ export struct DocumentViewerPage {
     return parts.join('\n\n');
   }
 
+  findPreviewEntityRange(): EntityRange | null {
+    const entity: BlockEntity | null = this.selectedEntity();
+    if (entity === null) {
+      return null;
+    }
+    return findEntityRangeInText(this.selectedPreviewPlain(), entity);
+  }
+
+  previewTextBefore(): string {
+    const plain: string = this.selectedPreviewPlain();
+    const range: EntityRange | null = this.findPreviewEntityRange();
+    if (range === null) {
+      return plain;
+    }
+    return plain.substring(0, range.start);
+  }
+
+  previewTextEntity(): string {
+    const range: EntityRange | null = this.findPreviewEntityRange();
+    if (range === null) {
+      return '';
+    }
+    const plain: string = this.selectedPreviewPlain();
+    return plain.substring(range.start, range.end);
+  }
+
+  previewTextAfter(): string {
+    const plain: string = this.selectedPreviewPlain();
+    const range: EntityRange | null = this.findPreviewEntityRange();
+    if (range === null) {
+      return '';
+    }
+    return plain.substring(range.end);
+  }
+
+  @Builder
+  selectionPreviewPlainMarked(before: string, entityPart: string, after: string) {
+    Text() {
+      if (before.length > 0) {
+        Span(before)
+          .fontSize(15)
+          .fontColor(Theme.TEXT_PRIMARY)
+      }
+      Span(entityPart)
+        .fontSize(15)
+        .fontColor(Theme.BRAND)
+        .decoration({
+          type: TextDecorationType.Underline,
+          style: TextDecorationStyle.DASHED,
+          color: Theme.BRAND
+        })
+      if (after.length > 0) {
+        Span(after)
+          .fontSize(15)
+          .fontColor(Theme.TEXT_PRIMARY)
+      }
+    }
+    .lineHeight(24)
+    .width('100%')
+  }
+
   @Builder
   selectionPreview() {
     if (this.selectedNeedsWebPreview()) {
@@ -321,26 +481,50 @@ export struct DocumentViewerPage {
         showLoading: true
       })
         .width('100%')
-    } else {
+    } else if (this.findPreviewEntityRange() === null) {
       Text(this.selectedPreviewPlain())
         .fontSize(15)
         .fontColor(Theme.TEXT_PRIMARY)
         .lineHeight(24)
         .width('100%')
         .textAlign(TextAlign.Start)
+    } else {
+      this.selectionPreviewPlainMarked(
+        this.previewTextBefore(),
+        this.previewTextEntity(),
+        this.previewTextAfter()
+      )
     }
   }
 
   // ===== 手势(子组件转发全局坐标) =====
-  onTapAt(gx: number, gy: number): void {
-    const hit: Hit = this.hitGlobal(gx, gy);
-    if (hit.idx < 0) return;
-    this.anchorPage = hit.page; this.anchorIdx = hit.idx;
-    this.curPage = hit.page; this.curIdx = hit.idx;
+  private openSelectionCard(): void {
+    this.ignoreCardBackdropOnce = true;
+    this.closeThumbRail();
     this.mdVisible = false;
     this.carding = true;
     this.cardIn = true;
     this.prepareEntityPreview();
+    setTimeout(() => {
+      this.ignoreCardBackdropOnce = false;
+    }, 80);
+  }
+
+  onTapAt(gx: number, gy: number): void {
+    const hit: Hit = this.hitGlobal(gx, gy);
+    if (hit.idx < 0) {
+      return;
+    }
+    this.anchorPage = hit.page;
+    this.anchorIdx = hit.idx;
+    this.curPage = hit.page;
+    this.curIdx = hit.idx;
+    // 抽屉开着时:第一次点原文只收起抽屉,第二次再出操作卡
+    if (this.mdVisible) {
+      this.mdVisible = false;
+      return;
+    }
+    this.openSelectionCard();
   }
 
   onPressStart(gx: number, gy: number): void {
@@ -362,10 +546,7 @@ export struct DocumentViewerPage {
     if (!this.pressing) return;
     this.pressing = false;
     if (this.anchorPage >= 0) {
-      this.mdVisible = false;
-      this.carding = true;
-      this.cardIn = true;
-      this.prepareEntityPreview();
+      this.openSelectionCard();
     }
   }
 
@@ -569,24 +750,49 @@ export struct DocumentViewerPage {
 
   centerPageFromScroll(): number {
     const doc = this.currentDoc();
-    if (doc === undefined) return 0;
+    if (doc === undefined) {
+      return 0;
+    }
     let yOff: number = 0;
-    try { yOff = this.scroller.currentOffset().yOffset; } catch (e) { yOff = 0; }
-    const viewCenter: number = yOff + (this.pageHeight(0) * 0.5);
+    try {
+      yOff = this.scroller.currentOffset().yOffset;
+    } catch (e) {
+      yOff = 0;
+    }
+    const viewCenter: number = yOff + this.contentViewportH * 0.5;
     let acc: number = 0;
     for (let i = 0; i < doc.originalImageUris.length; i++) {
-      const h: number = this.pageHeight(i);
-      if (viewCenter < acc + h) return i;
-      acc += h;
+      const slot: number = this.pageSlotHeight(i);
+      if (viewCenter < acc + slot) {
+        return i;
+      }
+      acc += slot;
     }
     return doc.originalImageUris.length - 1;
   }
 
   openSheet(fullDoc: boolean): void {
-    if (this.currentDoc() === undefined) return;
-    this.closeCard();   // 互斥:打开 markdown 抽屉时收起菜单卡
+    if (this.currentDoc() === undefined) {
+      return;
+    }
+    this.closeCard();
+    this.closeThumbRail();
     this.mdFullDoc = fullDoc;
     this.mdVisible = true;
+  }
+
+  toggleParseSheet(fullDoc: boolean): void {
+    if (this.currentDoc() === undefined) {
+      return;
+    }
+    if (this.currentDoc()!.status === 'parsing') {
+      return;
+    }
+    if (this.mdVisible) {
+      this.mdVisible = false;
+      return;
+    }
+    this.openSheet(fullDoc);
   }
 
   sharePdf(): void {
@@ -625,7 +831,12 @@ export struct DocumentViewerPage {
         .width('100%').height('100%')
         .backgroundColor(Color.Transparent)
         .backdropBlur(8)
-        .onClick(() => this.closeCard())
+        .onClick(() => {
+          if (this.ignoreCardBackdropOnce) {
+            return;
+          }
+          this.closeCard();
+        })
 
       Column() {
         Column() {
@@ -760,135 +971,266 @@ export struct DocumentViewerPage {
     .height('100%')
   }
 
+  @Builder
+  previewTopBar() {
+    Row() {
+      Row() {
+        Image($r('app.media.ic_back_brand'))
+          .width(22)
+          .height(22)
+          .objectFit(ImageFit.Contain)
+      }
+      .width(40)
+      .height(40)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => this.pathStack.pop())
+      Text(this.currentDoc()?.name ?? '文档')
+        .fontSize(17)
+        .fontColor(Theme.TEXT_PRIMARY)
+        .layoutWeight(1)
+        .textAlign(TextAlign.Center)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Row() {
+        if (this.currentDoc()?.status === 'parsing') {
+          LoadingProgress()
+            .width(14)
+            .height(14)
+            .color(Theme.BRAND)
+            .margin({ right: 4 })
+        }
+        Text(this.currentDoc()?.status === 'parsing'
+          ? '解析中'
+          : (this.mdVisible ? '收起' : '解析'))
+          .fontSize(14)
+          .fontColor(this.currentDoc()?.status === 'parsing' ? Theme.TEXT_SECONDARY : Theme.BRAND)
+      }
+      .padding({ left: 6, right: 6 })
+      .onClick(() => this.toggleParseSheet(true))
+      Row() {
+        Image($r('app.media.ic_more_dark'))
+          .width(20)
+          .height(20)
+          .objectFit(ImageFit.Contain)
+      }
+      .width(40)
+      .height(40)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .bindMenu(this.moreMenu())
+    }
+    .width('100%')
+    .padding({ left: 12, right: 8, top: 12, bottom: 8 })
+    .backgroundColor(this.previewBg)
+    .border({ width: { bottom: 0.5 }, color: Theme.DIVIDER })
+  }
+
+  @Builder
+  pageIndicatorPill() {
+    Row() {
+      Image($r('app.media.ic_file_hint'))
+        .width(13)
+        .height(13)
+        .objectFit(ImageFit.Contain)
+        .margin({ right: 5 })
+      Text(`${this.currentPage + 1} / ${this.currentDoc()!.originalImageUris.length}`)
+        .fontSize(13)
+        .fontColor(Theme.TEXT_PRIMARY)
+        .fontWeight(FontWeight.Medium)
+      if (this.isMultiPageDoc()) {
+        Text('缩略图')
+          .fontSize(11)
+          .fontColor(Theme.TEXT_SECONDARY)
+          .margin({ left: 6 })
+      }
+    }
+    .padding({ left: 11, right: 11, top: 5, bottom: 5 })
+    .backgroundColor('#FFFFFF')
+    .borderRadius(14)
+    .border({ width: 2, color: Theme.BRAND })
+    .shadow(Theme.SHADOW_SOFT)
+    .onClick(() => {
+      if (this.isMultiPageDoc() && !this.thumbRailVisible) {
+        this.openThumbRail();
+      }
+    })
+  }
+
+  @Builder
+  thumbRailOverlay() {
+    if (this.isMultiPageDoc() && this.thumbRailVisible) {
+      Stack({ alignContent: Alignment.TopStart }) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('rgba(0,0,0,0.28)')
+          .opacity(this.thumbRailIn ? 1 : 0)
+          .animation({ duration: 220, curve: Curve.EaseOut })
+          .onClick(() => this.closeThumbRail())
+
+        Column() {
+          DocumentThumbRail({
+            uris: this.currentDoc()!.originalImageUris,
+            aspects: this.imgAspect,
+            currentPage: this.currentPage,
+            onSelectPage: (idx: number) => this.onThumbPageSelect(idx)
+          })
+        }
+        .width(88)
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+        .padding({ left: 8 })
+        .translate({ x: this.thumbRailIn ? 0 : -88 })
+        .opacity(this.thumbRailIn ? 1 : 0)
+        .animation({ duration: 220, curve: Curve.EaseOut })
+      }
+      .width('100%')
+      .height('100%')
+      .hitTestBehavior(HitTestMode.Default)
+      .zIndex(10)
+    }
+  }
+
+  @Builder
+  documentScrollStack() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      List({ scroller: this.scroller }) {
+        ForEach(this.currentDoc()!.originalImageUris, (uri: string, idx: number) => {
+          ListItem() {
+            Row() {
+              Column() {
+                BboxImagePage({
+                  filePath: uri,
+                  page: this.pageInfo(idx),
+                  pageIndex: idx,
+                  selectedIdxs: this.selectedPerPage(idx),
+                  entityIdxs: this.entityIdxsPerPage(idx),
+                  onGeometry: (pi: number, gy: number, w: number, h: number) => { this.pageTopY[pi] = gy; },
+                  onTapAt: (gx: number, gy: number) => this.onTapAt(gx, gy),
+                  onPressStart: (gx: number, gy: number) => this.onPressStart(gx, gy),
+                  onPressMove: (gx: number, gy: number) => this.onPressMove(gx, gy),
+                  onPressEnd: () => this.onPressEnd()
+                })
+                  .width(this.pageContentWidth())
+                  .height(this.pageHeight(idx))
+              }
+              .width(this.pageContentWidth())
+              .borderRadius(4)
+              .clip(true)
+              .border({
+                width: this.isMultiPageDoc() ? 1 : 0.5,
+                color: this.isMultiPageDoc() ? this.pageFrameBorder : Theme.DIVIDER
+              })
+              .shadow(Theme.SHADOW_SOFT)
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
+          }
+          .padding({
+            top: this.isMultiPageDoc() ? this.pageGapV / 2 : 0,
+            bottom: this.isMultiPageDoc() ? this.pageGapV / 2 : 0
+          })
+        }, (uri: string, idx: number) => `${this.docId}_${idx}_${this.pages.length}`)
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(this.previewBg)
+      .scrollBar(BarState.Off)
+      .enableScrollInteraction(!this.pressing && this.currentDoc()!.status !== 'parsing' && !this.thumbRailVisible)
+      .onDidScroll(() => {
+        const cp: number = this.centerPageFromScroll();
+        if (cp !== this.currentPage) {
+          this.currentPage = cp;
+        }
+      })
+      .priorityGesture(
+        PanGesture({ fingers: 1, direction: PanDirection.Horizontal, distance: 24 })
+          .onActionEnd((e: GestureEvent) => {
+            if (this.pressing) {
+              return;
+            }
+            if (e.offsetX < -36) {
+              if (this.mdVisible) {
+                this.mdVisible = false;
+              } else {
+                this.openSheet(false);
+              }
+            }
+          })
+      )
+
+      Column() {
+        this.pageIndicatorPill()
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
+      .padding({ top: 8 })
+      .zIndex(2)
+
+      this.thumbRailOverlay()
+
+      if (this.currentDoc()!.status === 'parsing') {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor(Theme.BG_MASK)
+        Column() {
+          ParsingIndicator({
+            message: '文档解析中…',
+            hint: '完成后可框选内容并加入对话'
+          })
+        }
+        .padding({ left: 24, right: 24, top: 20, bottom: 20 })
+        .backgroundColor(Theme.BG_CARD)
+        .borderRadius(Theme.RADIUS_LG)
+        .shadow(Theme.SHADOW_FLOAT)
+      }
+    }
+    .layoutWeight(1)
+    .width('100%')
+    .backgroundColor(this.previewBg)
+    .onAreaChange((_o: Area, n: Area) => {
+      const h: number = n.height as number;
+      if (h > 0) {
+        this.contentViewportH = h;
+      }
+    })
+  }
+
   build() {
     NavDestination() {
       Stack() {
         Column() {
-          Row() {
-            Row() {
-              Image($r('app.media.ic_back_brand'))
-                .width(22)
-                .height(22)
-                .objectFit(ImageFit.Contain)
-            }
-            .width(40)
-            .height(40)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(VerticalAlign.Center)
-            .onClick(() => this.pathStack.pop())
-            Text(this.currentDoc()?.name ?? '文档')
-              .fontSize(17).fontColor(Theme.TEXT_PRIMARY)
-              .layoutWeight(1).textAlign(TextAlign.Center)
-              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-            Row() {
-              if (this.currentDoc()?.status === 'parsing') {
-                LoadingProgress()
-                  .width(14)
-                  .height(14)
-                  .color(Theme.BRAND)
-                  .margin({ right: 4 })
-              }
-              Text(this.currentDoc()?.status === 'parsing' ? '解析中' : '解析')
-                .fontSize(14)
-                .fontColor(this.currentDoc()?.status === 'parsing' ? Theme.TEXT_SECONDARY : Theme.BRAND)
-            }
-            .padding({ left: 6, right: 6 })
-            .onClick(() => this.openSheet(true))
-            Row() {
-              Image($r('app.media.ic_more_dark'))
-                .width(20)
-                .height(20)
-                .objectFit(ImageFit.Contain)
-            }
-            .width(40)
-            .height(40)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(VerticalAlign.Center)
-            .bindMenu(this.moreMenu())
-          }
-          .width('100%')
-          .padding({ left: 12, right: 8, top: 12, bottom: 8 })
-          .backgroundColor(Theme.BG_GLASS)
-          .border({ width: { bottom: 0.5 }, color: Theme.DIVIDER })
-          .backdropBlur(20)
+          this.previewTopBar()
 
           if (this.currentDoc() === undefined) {
             Column() {
               Text('文档不存在').fontSize(15).fontColor(Theme.TEXT_SECONDARY)
             }
             .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+            .backgroundColor(this.previewBg)
           } else {
-            Stack({ alignContent: Alignment.Center }) {
-              List({ scroller: this.scroller }) {
-                ForEach(this.currentDoc()!.originalImageUris, (uri: string, idx: number) => {
-                  ListItem() {
-                    BboxImagePage({
-                      filePath: uri,
-                      page: this.pageInfo(idx),
-                      pageIndex: idx,
-                      selectedIdxs: this.selectedPerPage(idx),
-                      onGeometry: (pi: number, gy: number, w: number, h: number) => { this.pageTopY[pi] = gy; },
-                      onTapAt: (gx: number, gy: number) => this.onTapAt(gx, gy),
-                      onPressStart: (gx: number, gy: number) => this.onPressStart(gx, gy),
-                      onPressMove: (gx: number, gy: number) => this.onPressMove(gx, gy),
-                      onPressEnd: () => this.onPressEnd()
-                    })
-                      .height(this.pageHeight(idx))
-                  }
-                // key 含 pages 长度:解析完成时(空→非空)key 变化,BboxImagePage 重建,
-                // 拿到带 blocks 的新 page prop,后续点击/长按高亮才能正确渲染。
-                }, (uri: string, idx: number) => `${this.docId}_${idx}_${this.pages.length}`)
-              }
-              .width('100%')
-              .height('100%')
-              .scrollBar(BarState.Off)
-              .enableScrollInteraction(!this.pressing && this.currentDoc()!.status !== 'parsing')
-              .onDidScroll(() => {
-                const cp: number = this.centerPageFromScroll();
-                if (cp !== this.currentPage) this.currentPage = cp;
-              })
-              .priorityGesture(
-                SwipeGesture({ direction: SwipeDirection.Horizontal })
-                  .onAction((e: GestureEvent) => {
-                    if (!this.pressing && (e.angle > 135 || e.angle < -135)) {
-                      this.openSheet(false);
-                    }
-                  })
-              )
-
-              if (this.currentDoc()!.status === 'parsing') {
-                Column()
-                  .width('100%')
-                  .height('100%')
-                  .backgroundColor(Theme.BG_MASK)
-                Column() {
-                  ParsingIndicator({
-                    message: '文档解析中…',
-                    hint: '完成后可框选内容并加入对话'
-                  })
-                }
-                .padding({ left: 24, right: 24, top: 20, bottom: 20 })
-                .backgroundColor(Theme.BG_CARD)
-                .borderRadius(Theme.RADIUS_LG)
-                .shadow(Theme.SHADOW_FLOAT)
-              }
-            }
-            .layoutWeight(1)
-            .width('100%')
+            this.documentScrollStack()
 
             Row() {
-              Text(`${this.currentPage + 1} / ${this.currentDoc()!.originalImageUris.length}`)
-                .fontSize(12).fontColor(Theme.TEXT_SECONDARY)
-              Text('  ·  长按选内容(可跨页) · 左滑看解析')
-                .fontSize(11).fontColor(Theme.TEXT_HINT)
+              Text(this.mdVisible
+                ? '上下滚动对照 · 顶栏收起'
+                : (this.isMultiPageDoc()
+                  ? '点击页码打开缩略图 · 点击原文弹窗 · 长按框选 · 左滑解析'
+                  : '点击原文弹窗 · 长按框选 · 左滑本页解析'))
+                .fontSize(11)
+                .fontColor(Theme.TEXT_HINT)
             }
-            .width('100%').justifyContent(FlexAlign.Center)
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
             .padding({ top: 6, bottom: 12 })
-            .backgroundColor(Theme.BG_CARD)
+            .backgroundColor(this.previewBg)
           }
         }
         .width('100%')
         .height('100%')
+        .backgroundColor(this.previewBg)
 
         if (this.currentDoc() !== undefined) {
           PageMarkdownSheet({
@@ -920,7 +1262,7 @@ export struct DocumentViewerPage {
       .animation({ duration: 200, curve: Curve.EaseOut })
     }
     .hideTitleBar(true)
-    .backgroundColor(Theme.BG_PAGE)
+    .backgroundColor(this.previewBg)
     .onShown(() => { this.pageEnter = true; })
   }
 }

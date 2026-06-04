@@ -3,11 +3,11 @@ import { Citation, DocRef, BlockRef } from '../model/Chat';
 /** 引用标签 —— 用在消息体和输入栏上方。 */
 @Component
 export struct CiteChip {
-  cite: Citation = { kind: 'doc', docId: '', docName: '' } as DocRef;
+  @Prop cite: Citation = { kind: 'doc', docId: '', docName: '' } as DocRef;
   removable: boolean = false;
   bg: string = 'rgba(10,89,247,0.14)';
-  fg: string = '#0A59F7';
-  onRemove: (cite: Citation) => void = () => {};
+  fg: string = '#FF8C00';
+  onRemove: () => void = () => {};
 
   label(): string {
     if (this.cite.kind === 'doc') {
@@ -46,7 +46,7 @@ export struct CiteChip {
         .padding(0)
         .margin({ left: 6 })
         .backgroundColor('rgba(0,0,0,0.18)')
-        .onClick(() => this.onRemove(this.cite))
+        .onClick(() => this.onRemove())
       }
     }
     .padding({ left: 10, right: this.removable ? 4 : 10, top: 4, bottom: 4 })

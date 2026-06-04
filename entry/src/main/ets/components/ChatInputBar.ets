@@ -1,4 +1,4 @@
-import { Citation } from '../model/Chat';
+import { Citation, citeKey } from '../model/Chat';
 import { CiteChip } from './CiteChip';
 import { Theme } from '../common/Theme';
 
@@ -8,7 +8,7 @@ export struct ChatInputBar {
   @Prop citations: Citation[] = [];
   @Prop sending: boolean = false;
   @Prop dropHover: boolean = false;
-  onRemoveCite: (cite: Citation) => void = () => {};
+  onRemoveCite: (index: number) => void = () => {};
   onSend: (text: string) => void = () => {};
   onStop: () => void = () => {};
   @State text: string = '';
@@ -34,28 +34,40 @@ export struct ChatInputBar {
                   CiteChip({
                     cite: c, removable: true,
                     bg: Theme.CHIP_BG, fg: Theme.CHIP_TEXT,
-                    onRemove: (rc: Citation) => this.onRemoveCite(rc)
+                    onRemove: () => this.onRemoveCite(idx)
                   })
                 }
                 .margin({ right: 6, bottom: 6 })
-              }, (c: Citation, idx: number) => `inp_cite_${idx}_${c.kind}`)
+              }, (c: Citation) => citeKey(c))
             }
             .width('100%')
             .padding({ top: 8, left: 10, right: 10 })
           }
-          TextArea({ placeholder: '说点什么…', text: this.text, controller: this.controller })
-            .width('100%')
-            .placeholderColor(Theme.TEXT_HINT)
-            .placeholderFont({ size: 14 })
-            .fontSize(15)
-            .fontColor(Theme.TEXT_PRIMARY)
-            .backgroundColor(Color.Transparent)
-            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-            .constraintSize({ minHeight: 40, maxHeight: 140 })
-            .onChange((v: string) => { this.text = v; })
+          Stack({ alignContent: Alignment.Center }) {
+            TextArea({ text: this.text, controller: this.controller })
+              .width('100%')
+              .textAlign(TextAlign.Start)
+              .fontSize(15)
+              .fontColor(Theme.TEXT_PRIMARY)
+              .backgroundColor(Color.Transparent)
+              .padding({ left: 12, right: 12 })
+              .constraintSize({ minHeight: 40, maxHeight: 140 })
+              .onChange((v: string) => { this.text = v; })
+            if (this.text.length === 0) {
+              Row() {
+                Text('说点什么…')
+                  .fontSize(14)
+                  .fontColor(Theme.TEXT_HINT)
+              }
+              .width('100%')
+              .padding({ left: 12, right: 12 })
+              .hitTestBehavior(HitTestMode.None)
+            }
+          }
+          .width('100%')
         }
         .layoutWeight(1)
-        .backgroundColor(Theme.BG_SUBTLE)
+        .backgroundColor(Theme.BG_CARD)
         .borderRadius(Theme.RADIUS_LG)
         .border({ width: 1, color: Theme.BORDER })
 

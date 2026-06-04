@@ -13,7 +13,7 @@
   /* 折叠首尾元素的外边距:标题/段落自带的 margin 会叠加在 padding 上,导致卡片内容上下空隙过大 */
   #preview > :first-child { margin-top: 0 !important; }
   #preview > :last-child { margin-bottom: 0 !important; }
-  .somarkdown-container a { color: #0A59F7; }
+  .somarkdown-container a { color: #FF8C00; }
   .somarkdown-container h1, .somarkdown-container h2, .somarkdown-container h3 { color: #1A1A1A; }
   img { max-width: 100%; height: auto; border-radius: 6px; }
   /* 图片框内的图放大到铺满,避免太小看不清 */
@@ -26,7 +26,12 @@
     width: 100%; height: 260px; border: 1px solid #E5E5EA;
     border-radius: 10px; margin: 12px 0 4px; background: #FFFFFF;
   }
-  ::selection { background: rgba(10,89,247,0.28); }
+  .somark-entity {
+    color: #FF8C00;
+    text-decoration: underline dashed #FF8C00;
+    text-underline-offset: 2px;
+  }
+  ::selection { background: rgba(255,140,0,0.28); }
 </style>
 <script src="somarkdown.umd.min.js"></script>
 </head>

@@ -105,7 +105,7 @@ export struct SessionHistorySheet {
           .width('100%').padding({ bottom: 12 })
         TextInput({ text: this.renameText })
           .fontSize(15).fontColor(Theme.TEXT_PRIMARY)
-          .backgroundColor(Theme.BG_SUBTLE).borderRadius(Theme.RADIUS_SM)
+          .backgroundColor(Theme.BG_CARD).borderRadius(Theme.RADIUS_SM)
           .border({ width: 1, color: Theme.BORDER })
           .padding(10)
           .onChange((v: string) => { this.renameText = v; })
@@ -126,8 +126,7 @@ export struct SessionHistorySheet {
       }
       .width('80%')
       .padding(18)
-      .backgroundColor(Theme.BG_GLASS)
-      .backdropBlur(20)
+      .backgroundColor(Theme.BG_CARD)
       .borderRadius(Theme.RADIUS_LG)
       .shadow(Theme.SHADOW_FLOAT)
       .position({ x: '10%', y: '34%' })

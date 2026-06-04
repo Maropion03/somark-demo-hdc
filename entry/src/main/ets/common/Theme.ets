@@ -3,16 +3,16 @@
  * 只承载视觉常量,不包含业务逻辑。
  */
 export class Theme {
-  // 品牌/强调色（系统蓝）
-  static readonly BRAND: string = '#0A59F7';
-  static readonly BRAND_PRESSED: string = '#0846C7';
-  static readonly BRAND_SOFT: string = 'rgba(10,89,247,0.12)';
-  static readonly BRAND_SOFT_BORDER: string = 'rgba(10,89,247,0.30)';
+  // 品牌/强调色（SoMark 橙）
+  static readonly BRAND: string = '#FF8C00';
+  static readonly BRAND_PRESSED: string = '#E67E00';
+  static readonly BRAND_SOFT: string = 'rgba(255,140,0,0.14)';
+  static readonly BRAND_SOFT_BORDER: string = 'rgba(255,140,0,0.35)';
 
   // 背景层级
   static readonly BG_PAGE: string = '#F3F5FA';
   static readonly BG_CARD: string = '#FFFFFF';
-  static readonly BG_SUBTLE: string = '#EEF2FB';
+  static readonly BG_SUBTLE: string = '#FFF6EB';
   static readonly BG_GLASS: string = 'rgba(255,255,255,0.78)';
   static readonly BG_MASK: string = 'rgba(10,18,40,0.26)';
 
@@ -27,14 +27,14 @@ export class Theme {
   static readonly BORDER: string = '#D8E1F0';
 
   // 气泡
-  static readonly BUBBLE_USER: string = '#0A59F7';
+  static readonly BUBBLE_USER: string = '#FF8C00';
   static readonly BUBBLE_USER_TEXT: string = '#FFFFFF';
   static readonly BUBBLE_ASSIST: string = '#FFFFFF';
   static readonly BUBBLE_ASSIST_TEXT: string = '#111827';
 
   // 引用标签(浅蓝)
-  static readonly CHIP_BG: string = 'rgba(10,89,247,0.12)';
-  static readonly CHIP_TEXT: string = '#0A59F7';
+  static readonly CHIP_BG: string = 'rgba(255,140,0,0.14)';
+  static readonly CHIP_TEXT: string = '#FF8C00';
 
   // 状态色
   static readonly DANGER: string = '#FA5151';

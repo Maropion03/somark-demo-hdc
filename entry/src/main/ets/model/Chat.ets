@@ -21,6 +21,18 @@ export interface BlockRef {
 
 export type Citation = DocRef | BlockRef;
 
+/** ForEach / 去重 / 删除引用时的稳定 key。 */
+export function citeKey(c: Citation): string {
+  if (c.kind === 'doc') {
+    return 'doc_' + (c as DocRef).docId;
+  }
+  const b = c as BlockRef;
+  const previewKey: string = b.previewText.length > 0
+    ? b.previewText.substring(0, 48)
+    : 'empty';
+  return `block_${b.docId}_${b.pageIndex}_${b.blockIndices.join(',')}_${previewKey}`;
+}
+
 export interface ChatMessage {
   id: string;
   role: string;             // 'user' | 'assistant'
