@@ -1,0 +1,8 @@
+/**
+ * 复制本文件为 config.ets 并填入真实密钥（config.ets 已 gitignore，不会提交）。
+ */
+export const SOMARK_API_KEY: string = 'your-somark-api-key';
+
+export const DMX_API_URL: string = 'https://your-openai-compatible-endpoint/v1/chat/completions';
+export const DMX_API_KEY: string = 'your-llm-api-key';
+export const DMX_MODEL: string = 'your-model-id';
