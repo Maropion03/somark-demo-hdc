@@ -1,4 +1,4 @@
-# 扫描王中王（SoScan）
+# somark文档智能app
 
 HarmonyOS NEXT 上的智能文档扫描与对话演示应用，为 **SoMark HDC 2026** 打造。
 
